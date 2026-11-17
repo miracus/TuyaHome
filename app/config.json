@@ -1,0 +1,104 @@
+{
+  "_comment": "Налаштування правил. Змінюється без зміни коду; після правки — перерозгорнути Lambda.",
+
+  "_notifications_comment": "false — сповіщення не надсилаються і не стають у чергу (події лише в журналі й на дашборді)",
+  "notifications_enabled": true,
+
+  "gateway_categories": ["wg", "wg2"],
+
+  "_power_comment": "Світло: є, поки онлайн хоч один прилад із power_sources (розетка). Інтернет: за шлюзом (хаб на зарядній станції). Розетка — Zigbee через хаб, тож без хаба стан світла невідомий.",
+  "power_sources": [{"category": "cz"}],
+
+  "outage_schedule": {
+    "_comment": "Графік відключень ДТЕК Київські регіональні. Сайт ДТЕК закритий для ботів, тому дані з відкритого дзеркала (Baskerville42/outage-data-ua, MIT), яке оновлюється кожні кілька хвилин. Черга адреси визначена на сайті ДТЕК (getHomeNum) 14.11.2026.",
+    "address": "<your address>",
+    "provider": "ДТЕК Київські регіональні електромережі",
+    "group": "GPV5.2",
+    "source_url": "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/kyiv-region.json",
+    "fetch_every_min": 15,
+    "_notify_comment": "2026-11-15: нагадування перед відключенням вимкнено (remind_before_min=0); «графік змінено» — увімкнено, це важливо для користувача",
+    "remind_before_min": 0,
+    "notify_changes": true
+  },
+
+  "air_alerts": {
+    "_comment": "Повітряні тривоги з siren.pp.ua (відкрита обгортка Ukraine Alarm, без токена). Тривога в регіоні — якщо активна хоч в одному з ids (район або вся область).",
+    "source_url": "https://siren.pp.ua/api/v3/alerts",
+    "regions": [
+      {"name": "Бориспільський район", "ids": ["78", "14"]},
+      {"name": "м. Київ", "ids": ["31"]}
+    ],
+    "notify": true
+  },
+
+  "dtek_report": {
+    "_comment": [
+      "Кнопка «🆘 Заявка ДТЕК» (лише «Дім»): питання про світло в коридорі → «Немає» → заявка в бот ДТЕК від Telegram-акаунта власника (Telethon, ключ входу в SSM ssm_param; створює tools/dtek_tg.py login).",
+      "Обмеження (16.11): наступна заявка — лише після відповіді ДТЕК, а без відповіді — не раніше repeat_after_h.",
+      "Відповіді ДТЕК читаються кожен запуск опитувача, поки заявка жива: watch_days від подання, після відповіді — ще quiet_after_answer_h.",
+      "flow — кроки сценарію в боті ДТЕК: {\"send\": текст} | {\"click\": regex кнопки} | {\"expect\": regex відповіді}; wait_s, optional."
+    ],
+    "enabled": false,
+    "bot": "DTEKKyivRegionElektromerezhiBot",
+    "repeat_after_h": 12,
+    "watch_days": 7,
+    "quiet_after_answer_h": 72,
+    "ssm_param": "/tuyahome/tg_user",
+    "flow": []
+  },
+
+  "weather": {
+    "_comment": "Прогноз Open-Meteo (без ключа) для Борисполя; порівнюється з датчиком sensor (температура/вологість). Завершені доби — в архів ARCH#weather.",
+    "place": "Бориспіль",
+    "lat": 50.35,
+    "lon": 30.94,
+    "sensor": "Назовні",
+    "_fetch_comment": "15 хв — щоб «чи йде зараз дощ» був свіжим (поточні дані Open-Meteo — 15-хвилинні)",
+    "fetch_every_min": 15
+  },
+
+  "tuya_rooms_refresh_hours": 24,
+
+  "model_overrides": {
+    "_comment": "Поправки до моделі приладу, коли прошивка звітує інакше, ніж заявляє модель. Ключ: категорія/код DP.",
+    "cz/cur_voltage": {"scale": 1}
+  },
+
+  "_voltage_comment": "Сповіщення, якщо напруга > voltage_high або < voltage_low (межі — ще норма)",
+  "voltage_high": 248,
+  "voltage_low": 200,
+  "voltage_alert_cooldown_min": 30,
+
+  "battery_low_pct": 15,
+
+  "alarm_values": ["alarm", "1", "true"],
+  "alarm_codes": ["watersensor_state", "gas_sensor_state", "gas_sensor_status", "smoke_sensor_state", "smoke_sensor_status", "master_state"],
+
+  "timezone": "Europe/Kyiv",
+  "utc_offset_fallback_h": 2,
+
+  "device_offline_alert_hours": 6,
+
+  "polling": {
+    "_comment": [
+      "Ліміт Tuya — на запити до API за місяць. Планувальник (budget.py) рахує суму всіх правил і, якщо вона більша за ліміт × safety, розтягує інтервали.",
+      "snapshot: стан УСІХ приладів одним запитом (online/offline, поточні значення). Від нього залежить тригер «немає світла», тому він розтягується останнім. Розклад Lambda = snapshot_every_min.",
+      "rules: окреме число для приладу × параметра.",
+      "  source=log — кожна зміна параметра з журналу приладу; коштує запит на прилад за кожне спрацювання (параметри одного приладу, що настали одночасно, йдуть одним запитом).",
+      "  source=snapshot — числове значення зі знімка пишеться в історію раз на every_min; запитів не коштує. Логічні/перелічувані (вкл/викл, двері, тривога) — завжди при зміні.",
+      "match: id, name або category приладу. Параметри без правила — зі знімка, при зміні, але не рідше ніж раз на default_store_every_min."
+    ],
+    "monthly_api_quota": 26000,
+    "quota_safety_pct": 90,
+    "snapshot_every_min": 2,
+    "default_store_every_min": 30,
+    "rules": [
+      {"_comment": "2026-11-15: графіки потужності/струму/спожитого не потрібні — їхній журнал не тягнемо, квота йде на напругу", "match": {"category": "cz"}, "code": "cur_voltage", "source": "log", "every_min": 30},
+      {"_comment": "усі температури й вологість — раз на 30 хв", "match": {}, "code_re": "temp|humid|prm_content", "source": "snapshot", "every_min": 30},
+      {"_comment": "2026-11-15: датчик руху (pir) віддає вологість і освітленість лише в тіньових властивостях — окремий запит раз на 60 хв (прилад сам вимірює раз на 60 хв, sensor_sampling)", "match": {"category": "pir"}, "codes": ["humidity_value", "illuminance_value"], "source": "shadow", "every_min": 60}
+    ]
+  },
+  "history_ttl_days": 1825,
+  "events_ttl_days": 1825,
+  "model_refresh_days": 7
+}

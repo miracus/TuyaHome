@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f5f7">
+<title>Дім</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#16181d;--muted:#6b7280;--line:#e5e7eb;--ok:#15803d;--ok-bg:#dcfce7;--bad:#b91c1c;--bad-bg:#fee2e2;--warn:#a16207;--warn-bg:#fef3c7;--accent:#2563eb;--chart:#2563eb;--grid:#eef0f3;--on:#86efac;--off:#f87171;--maybe:#fcd34d}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b21;--ink:#e8eaee;--muted:#9aa1ad;--line:#2a2e36;--ok:#4ade80;--ok-bg:#14301f;--bad:#f87171;--bad-bg:#3a1717;--warn:#facc15;--warn-bg:#3a3110;--accent:#60a5fa;--chart:#60a5fa;--grid:#23272f;--on:#166534;--off:#991b1b;--maybe:#a16207}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1680px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600}
+.muted{color:var(--muted)}.small{font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.sec-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+.sec-head h2{margin:0;margin-right:auto}
+
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+header .title{display:flex;align-items:center;gap:12px;margin-right:auto;flex-wrap:wrap}
+.status{display:flex;gap:10px;flex-wrap:wrap}
+.st{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:12px;min-width:0}
+.st .ico{font-size:20px;line-height:1}
+.st b{display:block;font-size:15px}
+.st span{display:block;font-size:12px;opacity:.85}
+.st.ok{background:var(--ok-bg);color:var(--ok)}.st.bad{background:var(--bad-bg);color:var(--bad)}.st.warn{background:var(--warn-bg);color:var(--warn)}
+
+/* графік відключень */
+#sched{margin-bottom:12px}
+.sched-day{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;align-items:center;margin-top:8px}
+.sched-day .lbl{font-weight:600;font-size:13px}
+.sched-day .lbl span{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.bar48{display:grid;grid-template-columns:repeat(48,1fr);gap:1px;height:22px;border-radius:6px;overflow:hidden;position:relative}
+.bar48 i{display:block;background:var(--on)}.bar48 i.off{background:var(--off)}.bar48 i.maybe{background:var(--maybe)}
+.bar48 .now{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.bars{display:grid;grid-template-columns:38px minmax(0,1fr);gap:3px 6px;align-items:center}
+.bars .cap{font-size:11px;color:var(--muted)}
+.fact{position:relative;height:14px;border-radius:6px;overflow:hidden;
+  background:repeating-linear-gradient(45deg,var(--grid) 0 4px,transparent 4px 8px)}
+.fact b{position:absolute;top:0;bottom:0;background:var(--on)}.fact b.off{background:var(--off)}.fact b.unk{background:var(--muted);opacity:.45}
+.ticks{display:grid;grid-template-columns:repeat(8,1fr);font-size:11px;color:var(--muted);margin-left:164px;margin-top:2px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;background:var(--on)}
+.legend i.off{background:var(--off)}.legend i.maybe{background:var(--maybe)}
+.next{font-weight:600}
+/* погода: прогноз vs датчик «Назовні» — та сама сітка доби, що й графік ДТЕК */
+#weather{margin-bottom:12px}
+.sky{display:grid;grid-template-columns:repeat(8,1fr);gap:1px;height:30px;border-radius:6px;overflow:hidden;position:relative}
+.sky i{display:flex;align-items:center;justify-content:center;gap:3px;font-style:normal;font-size:12px;background:var(--grid)}
+.sky i.clear{background:#fef3c7}.sky i.cloud{background:#e5e7eb}.sky i.rain{background:#bfdbfe}.sky i.snow{background:#e0f2fe}.sky i.storm{background:#c7d2fe}
+@media (prefers-color-scheme:dark){.sky i.clear{background:#3a3110}.sky i.cloud{background:#2a2e36}.sky i.rain{background:#1e3a5f}.sky i.snow{background:#1f3b4d}.sky i.storm{background:#312e81}}
+.wline{position:relative;height:46px;border-radius:6px;background:var(--grid);overflow:hidden}
+.wline svg{position:absolute;inset:0;width:100%;height:100%}
+.wline .rng{position:absolute;left:4px;top:1px;font-size:10px;color:var(--muted)}
+.wline .rng.b{top:auto;bottom:1px}
+.sky .now,.wline .now{position:absolute;top:0;bottom:0;width:2px;background:var(--ink)}
+.wtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin:2px 0 6px}
+.wt{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;min-width:0}
+.wt .wi{font-size:24px;line-height:1}
+.wt small{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.wt b{display:block;font-size:18px;line-height:1.25}
+.wt b em{font-style:normal;font-weight:500;font-size:14px;color:var(--muted);margin-left:6px}
+.wt span:last-child{display:block;font-size:12px;color:var(--muted)}
+.wt.wet{background:color-mix(in srgb,var(--accent) 12%,transparent);border-color:transparent}.wt.wet b{color:var(--accent)}
+.wt.dim{opacity:.6}
+.rain{position:relative;height:40px;border-radius:6px;background:var(--grid);overflow:hidden}
+.rain b{position:absolute;bottom:4px;border-radius:2px 2px 0 0}
+.rain u{position:absolute;bottom:0;height:2px;background:#ea580c;opacity:.7;text-decoration:none}
+.rain .rng{position:absolute;left:4px;top:1px;font-size:10px;color:var(--muted)}
+.rain .now{position:absolute;top:0;bottom:0;width:2px;background:var(--ink)}
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:6px}
+@media (max-width:700px){.week{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.wday{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:8px 4px;border:1px solid var(--line);border-radius:10px}
+.wday .ico{font-size:26px;line-height:1}
+.trng{position:relative;width:80%;height:6px;border-radius:3px;background:var(--grid)}
+.trng i{position:absolute;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,#60a5fa,#f97316)}
+.pbar{position:relative;width:60%;height:34px;border-bottom:1px solid var(--line)}
+.pbar i{position:absolute;bottom:0;left:25%;right:25%;background:#3b82f6;border-radius:2px 2px 0 0}
+@media (max-width:600px){.sky i{font-size:10px;flex-direction:column;gap:0}.sky{height:36px}}
+
+/* макет: зліва аналогові графіки, справа дискретні датчики */
+/* два види з вертикальною стрілкою-перемикачем на всю висоту */
+.views{display:grid;gap:10px;grid-template-columns:minmax(0,1fr) 48px;align-items:stretch}
+.views[data-view="discrete"]{grid-template-columns:48px minmax(0,1fr)}
+.views[data-view="analog"] .discrete,.views[data-view="analog"] .flip.left,
+.views[data-view="discrete"] .analog,.views[data-view="discrete"] .flip.right{display:none}
+.view{min-width:0}
+.flip{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:240px;
+  border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:14px;cursor:pointer;font:inherit;padding:10px 0}
+.flip:hover{border-color:var(--accent);color:var(--accent)}
+.flip span{writing-mode:vertical-rl;font-weight:700;font-size:14px;letter-spacing:.04em}
+.flip.left span{transform:rotate(180deg)}
+.flip b{font-size:30px;line-height:1}
+@media (max-width:600px){.views{grid-template-columns:minmax(0,1fr) 34px}.views[data-view="discrete"]{grid-template-columns:34px minmax(0,1fr)}
+  .flip span{font-size:12px}.flip b{font-size:24px}}
+/* Графіки: 1-ша колонка — температура, 2-га — вологість того самого приміщення (в одному рядку),
+   3-тя — напруга й усе інше. Вужче 900px: пари температура|вологість, решта нижче на всю ширину;
+   на телефоні — одна колонка: температура, вологість приміщення, далі наступне приміщення, решта в кінці. */
+.charts{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
+.ccol{display:flex;flex-direction:column;gap:12px;min-width:0}
+.ccol h3{margin:0;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.chart.empty{opacity:.5;cursor:default}.chart.empty .ch-head{cursor:default}
+@media (max-width:899px){.charts{grid-template-columns:repeat(2,minmax(0,1fr))}.ccol.other{grid-column:1/-1}}
+@media (max-width:599px){.charts{grid-template-columns:minmax(0,1fr)}.ccol.pair{display:contents}.ccol h3{display:none}
+  .ccol.other{grid-column:auto;order:100000}.chart.empty{display:none}}
+.ch-head .info{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;padding:0 2px}
+.ch-head .info:hover{color:var(--accent)}
+.ch-head{display:flex;align-items:baseline;gap:8px;cursor:pointer;user-select:none}
+.ch-head .chev{color:var(--muted);transition:transform .2s;font-size:12px}
+.chart.open .ch-head .chev{transform:rotate(90deg)}
+.chart .body{display:none;margin-top:6px}.chart.open .body{display:block}
+.charts .chart{padding:10px 14px}
+.ch-head .name{font-weight:600;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-head .val{margin-left:auto;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ch-head .val small{font-size:13px;color:var(--muted);font-weight:600;margin-left:2px}
+.ch-note{font-size:12px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+.seg button{border:0;background:transparent;color:var(--ink);padding:5px 10px;font:inherit;font-size:13px;cursor:pointer}
+.seg button.on{background:var(--accent);color:#fff}
+svg{display:block;width:100%;height:auto}
+
+.devices{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(190px,100%),1fr))}
+.room-head{grid-column:1/-1;font-size:13px;font-weight:700;color:var(--muted);margin:6px 0 -2px;display:flex;align-items:center;gap:8px}
+.room-head:first-child{margin-top:0}
+.room-head span{font-weight:600;font-size:11px;background:var(--grid);border-radius:999px;padding:0 7px}
+.room-head::after{content:"";flex:1;height:1px;background:var(--line)}
+.dev{cursor:pointer;padding:10px 12px;transition:border-color .15s}
+.dev:hover{border-color:var(--accent)}
+.dev .main{margin-top:6px;font-weight:700;font-size:15px}
+.dev .main.alarm{color:var(--bad)}.dev .main.ok{color:var(--ok)}
+/* вікно приладу */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:24px 12px}
+.modal.on{display:flex}
+.sheet{background:var(--card);border-radius:16px;max-width:880px;width:100%;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.sheet .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.sheet .top h3{margin:0;font-size:20px;margin-right:auto}
+.sheet .x{border:0;background:var(--grid);color:var(--ink);border-radius:10px;width:34px;height:34px;font-size:18px;cursor:pointer}
+.sheet h4{margin:16px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.pill{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;background:var(--grid);color:var(--muted);margin:0 4px 4px 0}
+.pill.on{background:var(--ok-bg);color:var(--ok)}.pill.off{background:var(--bad-bg);color:var(--bad)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;color:var(--muted);font-weight:600;padding:5px 8px 5px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:5px 8px 5px 0;border-bottom:1px dashed var(--line);vertical-align:top}
+.tbl td.v{font-weight:700}.tbl code{font-size:12px;color:var(--muted)}
+.scroll{overflow-x:auto}
+.kv{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:4px 14px;font-size:13px}
+.kv span:nth-child(odd){color:var(--muted)}
+.mini{margin:6px 0 10px}.mini .ttl{font-size:13px;font-weight:600}
+@media (max-width:600px){.modal{padding:0}.sheet{border-radius:0;min-height:100%}}
+.dev-head{display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--ok)}.dot.off{background:var(--bad)}
+.dev-name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--muted);margin-left:auto;white-space:nowrap}
+.tag.key{border-color:var(--accent);color:var(--accent)}
+.dev-sub{display:flex;gap:10px;font-size:12px;color:var(--muted);margin:2px 0 6px 17px}
+.dev-sub .low{color:var(--bad);font-weight:600}
+.row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px dashed var(--line)}
+.row:first-of-type{border-top:0}
+.row .v{font-weight:600;text-align:right}
+.row .v.alarm{color:var(--bad)}.row .v.ok{color:var(--ok)}
+details{margin-top:6px}summary{cursor:pointer;color:var(--muted);font-size:13px}
+
+.bottom{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));margin-top:12px}
+ul.list{list-style:none;margin:0;padding:0;max-height:340px;overflow:auto}
+ul.list li{padding:6px 0;border-top:1px solid var(--line);display:flex;gap:10px}
+ul.list li:first-child{border-top:0}
+ul.list .t{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px;min-width:86px}
+ul.list li.dim{color:var(--muted)}
+.kind{font-size:11px;border-radius:6px;padding:0 6px;margin-right:6px;white-space:nowrap}
+.kind.power{background:var(--warn-bg);color:var(--warn)}.kind.net{background:var(--grid);color:var(--muted)}
+.bar{height:8px;background:var(--grid);border-radius:4px;overflow:hidden;margin:6px 0}
+.bar>div{height:100%;background:var(--accent)}
+.err{background:var(--bad-bg);color:var(--bad);padding:10px 14px;border-radius:10px;margin-bottom:12px;display:none}
+
+@media (max-width:600px){
+  main{padding:12px}
+  .status{width:100%}
+  .st{flex:1 1 0;padding:8px 10px}
+  .card{padding:12px}
+  /* на телефоні підпис доби — над смугами, смуги на всю ширину */
+  .sched-day{grid-template-columns:minmax(0,1fr);gap:4px}
+  .ticks{margin-left:44px;grid-template-columns:repeat(4,1fr)}
+  .ticks .x{display:none}
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="title"><h1>Дім</h1>
+      <span id="updated" class="muted small"></span></div>
+    <div class="status">
+      <div id="st-power" class="st"><span class="ico">💡</span><div><b>…</b><span></span></div></div>
+      <div id="st-net" class="st"><span class="ico">🌐</span><div><b>…</b><span></span></div></div>
+      <span id="st-alerts" class="status"></span>
+    </div>
+  </header>
+  <div id="err" class="err"></div>
+
+  <section class="card" id="sched" hidden></section>
+  <section class="card" id="weather" hidden></section>
+
+  <!-- два види: «Показники» (аналогові, за замовчуванням) і «Датчики і прилади» (дискретні);
+       перемикач — вертикальна стрілка на всю висоту: справа на показниках, зліва на датчиках -->
+  <div class="views" id="views" data-view="analog">
+    <button class="flip left" id="to-analog" aria-label="Показники"><b>‹</b><span>Показники</span></button>
+    <section class="view analog">
+      <div class="sec-head"><h2>Показники</h2><span class="seg" id="ranges"></span></div>
+      <div class="charts" id="charts"></div>
+    </section>
+    <section class="view discrete">
+      <div class="sec-head"><h2>Датчики і прилади</h2><span class="small muted">прилади без аналогових показників</span></div>
+      <div class="devices" id="devices"></div>
+    </section>
+    <button class="flip right" id="to-discrete" aria-label="Датчики і прилади"><span>Датчики і прилади</span><b>›</b></button>
+  </div>
+
+  <div class="bottom">
+    <div class="card"><h2>Світло та інтернет</h2><div id="out-sum" class="small muted"></div><ul class="list" id="outages"></ul></div>
+    <div class="card"><h2>Події</h2><ul class="list" id="events"></ul></div>
+    <div class="card"><h2>Квота Tuya API</h2><div id="quota" class="small"></div></div>
+  </div>
+</main>
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<script>
+const K = new URLSearchParams(location.search).get("k") || "";
+const api = (p, q = {}) => fetch(`${p}?${new URLSearchParams({k: K, ...q})}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+
+const LABEL = {cur_voltage:"Напруга",cur_power:"Потужність",cur_current:"Струм",add_ele:"Спожито",
+  switch:"Стан",switch_on:"Увімкнено",switch_1:"Канал 1",switch_2:"Канал 2",switch_3:"Канал 3",switch_4:"Канал 4",switch_5:"Канал 5",switch_6:"Канал 6",
+  va_temperature:"Температура",temp_current:"Температура",prm_temperature:"Температура",
+  va_humidity:"Вологість",humidity_value:"Вологість",prm_content:"Вологість",
+  battery_percentage:"Батарея",battery:"Батарея",Battery:"Батарея",va_battery:"Батарея",
+  watersensor_state:"Протікання",gas_sensor_status:"Газ",gas_sensor_state:"Газ",gas_sensor_value:"Газ, рівень",
+  smoke_sensor_status:"Дим",smoke_sensor_state:"Дим",master_state:"Стан хаба",pir:"Рух",pir_state:"Рух",
+  illuminance_value:"Освітленість",doorcontact_state:"Двері",prm_switch:"Двері",switch_mode1:"Натискання",switch_type_1:"Натискання",
+  checking_result:"Самоперевірка",preheat:"Прогрів"};
+const UNIT = {"度":"кВт·год","V":"В","W":"Вт","mA":"мА","s":"с","%":"%","℃":"°C","LEL":"LEL","lux":"лк"};
+const VAL = {normal:"норма",alarm:"ТРИВОГА",check_success:"ок",check_failure:"збій",single_click:"одне",click:"одне",
+  double_click:"подвійне",long_press:"довге",pir:"є рух",none:"немає"};
+const PRIMARY = /voltage|power|current|ele|temp|humid|battery|state|status|switch|pir|illum|door|gas_sensor_value|prm_/i;
+const SETTINGS = /sensitivity|delay|sampl|compens|ringtone|alarm_time|alarm_switch|alarm_volume|muffl|reset|convert|alarm_active|sound|self_check/i;
+const BATTERY = /battery/i;
+// ці показники на графіках не потрібні (2026-11-15)
+const CHART_EXCLUDE = /gas_sensor_value|add_ele|cur_current|cur_power/;
+const ICON = {cz:"🔌", rqbj:"🔥", ywbj:"💨", sj:"💧", mcs:"🚪", wsdcg:"🌡️", pir:"🏃", wxkg:"🔘", wg2:"📡", wg:"📡", kg:"📺"};
+
+let S = null, range = 24;
+const fmtT = (ms, d) => new Date(ms).toLocaleString("uk-UA", d ? {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"} : {hour:"2-digit",minute:"2-digit"});
+const hhmm = ms => { const s = fmtT(ms); return s === "00:00" ? "24:00" : s; };
+const dur = ms => { let m = Math.max(0, Math.round(ms/60000)), d = Math.floor(m/1440), h = Math.floor(m%1440/60); m %= 60;
+  return [d && d+" д", h && h+" год", m+" хв"].filter(Boolean).join(" "); };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const label = d => LABEL[d.code] || d.code;
+const unit = u => UNIT[u] ?? u ?? "";
+const isPrimary = d => PRIMARY.test(d.code) && !SETTINGS.test(d.code);
+const isAnalog = d => typeof d.value === "number" && isPrimary(d) && !BATTERY.test(d.code) && !CHART_EXCLUDE.test(d.code);
+const isDiscrete = d => typeof d.value !== "number" && isPrimary(d);
+function show(dev, d) {
+  const v = d.value;
+  if (typeof v === "boolean") {
+    if (dev.category === "mcs" || /door|prm_switch/.test(d.code)) return v ? "відчинено" : "зачинено";
+    return v ? "увімк" : "вимк";
+  }
+  if (typeof v === "number") return `${v} ${unit(d.unit)}`.trim();
+  return VAL[v] ?? (v === "" ? "—" : v);
+}
+function setSt(id, cls, title, sub) {
+  const el = document.getElementById(id);
+  el.className = `st ${cls}`; el.querySelector("b").textContent = title; el.querySelector("span:last-child").textContent = sub;
+}
+
+function renderHeader() {
+  const hub = S.devices.find(d => d.gateway);
+  const netUp = !hub || hub.online, net = S.internet || {};
+  if (netUp) setSt("st-net", "ok", "Інтернет є", net.since ? `з ${fmtT(net.since, 1)}` : "");
+  else setSt("st-net", "bad", "Немає інтернету", `${dur(S.now - (net.since || hub.offline_since || S.now))} · хаб офлайн`);
+  if (S.outage) setSt("st-power", "bad", "Немає світла", `${dur(S.now - S.outage.start)} · з ${fmtT(S.outage.start)}`);
+  else if (!netUp) setSt("st-power", "warn", "Світло: невідомо", "розетка працює через хаб");
+  else { const since = S.power?.since || S.last_outage?.end; setSt("st-power", "ok", "Світло є", since ? `з ${fmtT(since, 1)}` : ""); }
+  const lp = S.last_poll?.ts;
+  document.getElementById("updated").textContent = lp ? `оновлено ${fmtT(lp)}` : "";
+  renderAlerts();
+}
+
+function renderAlerts() {
+  const A = S.air_alerts || {};
+  document.getElementById("st-alerts").innerHTML = Object.entries(A).map(([name, a]) => {
+    const short = name.replace("Бориспільський район", "Бориспільський р-н");
+    const yel = a.level === "yellow";
+    return a.active
+      ? `<div class="st ${yel ? "warn" : "bad"}"><span class="ico">${yel ? "🟡" : "🚨"}</span><div><b>${yel ? "Жовта тривога" : "Тривога"} · ${esc(short)}</b><span>${yel ? "жовтий" : "червоний"} рівень · ${dur(S.now - a.since)} · з ${fmtT(a.since)}</span></div></div>`
+      : `<div class="st ok"><span class="ico">🕊️</span><div><b>Тихо · ${esc(short)}</b><span>${a.last ? `відбій о ${fmtT(a.last.end)}` : "без тривоги"}</span></div></div>`;
+  }).join("");
+}
+
+// смуга «Факт»: зелене — світло було (розетка онлайн), червоне — не було, сіре — невідомо (не було інтернету),
+// штрихи — немає даних (до запуску системи або ще не настало)
+function factBar(day, A) {
+  const d0 = day, d1 = day + 864e5, pct = t => (Math.min(Math.max(t, d0), d1) - d0) / 864e5 * 100;
+  const from = Math.max(d0, A.monitor_since || A.now), to = Math.min(d1, A.now);
+  if (to <= from) return `<div class="fact"></div>`;
+  const seg = (a, b, cls) => { a = Math.max(a, from); b = Math.min(b, to); return b > a ? `<b class="${cls}" style="left:${pct(a)}%;width:${pct(b) - pct(a)}%"></b>` : ""; };
+  return `<div class="fact">${seg(from, to, "")}${A.off.map(([a, b]) => seg(a, b, "off")).join("")}${A.unknown.map(([a, b]) => seg(a, b, "unk")).join("")}</div>`;
+}
+
+// ---- погода: прогноз Open-Meteo по годинах (пунктир) і датчик «Назовні» (суцільна лінія)
+const WMO = [[0,"☀️","ясно","clear"],[1,"🌤","переважно ясно","clear"],[2,"⛅","мінлива хмарність","cloud"],[3,"☁️","хмарно","cloud"],
+  [45,"🌫","туман","cloud"],[48,"🌫","туман","cloud"],[51,"🌦","мряка","rain"],[53,"🌦","мряка","rain"],[55,"🌧","мряка","rain"],
+  [56,"🌧","крижана мряка","rain"],[57,"🌧","крижана мряка","rain"],[61,"🌦","невеликий дощ","rain"],[63,"🌧","дощ","rain"],
+  [65,"🌧","сильний дощ","rain"],[66,"🌧","крижаний дощ","rain"],[67,"🌧","крижаний дощ","rain"],[71,"🌨","невеликий сніг","snow"],
+  [73,"🌨","сніг","snow"],[75,"❄️","сильний сніг","snow"],[77,"🌨","крупа","snow"],[80,"🌦","злива","rain"],[81,"🌧","зливи","rain"],
+  [82,"⛈","сильні зливи","storm"],[85,"🌨","снігопад","snow"],[86,"❄️","снігопад","snow"],[95,"⛈","гроза","storm"],[96,"⛈","гроза з градом","storm"],[99,"⛈","гроза з градом","storm"]];
+const wmo = c => WMO.find(w => w[0] === c) || [c, "🌡", "—", ""];
+
+function wLine(d0, d1, fc, sens, lo, hi, fmt) {
+  // fc, sens — [[мс, значення]]; x — частка доби, y — у межах lo..hi
+  const X = t => ((t - d0) / (d1 - d0) * 1000).toFixed(1), Y = v => (44 - (v - lo) / (hi - lo || 1) * 40).toFixed(1);
+  const path = pts => pts.filter(p => p[1] != null).map((p, i) => `${i ? "L" : "M"}${X(p[0])},${Y(p[1])}`).join("");
+  // датчик міряє цілими (5°, 6°) — сирі точки дають «сходинки»; згладжуємо ковзним середнім ±1 год і малюємо кривою
+  const smooth = pts => pts.map(([t]) => { const w = pts.filter(q => Math.abs(q[0] - t) <= 36e5);
+    return [t, w.reduce((a, q) => a + q[1], 0) / w.length]; });
+  const curve = pts => { if (pts.length < 3) return path(pts);
+    const P = pts.map(p => [+X(p[0]), +Y(p[1])]); let d = `M${P[0][0]},${P[0][1]}`;
+    for (let i = 0; i < P.length - 1; i++) { const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2;
+      d += `C${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0]},${p2[1]}`; }
+    return d; };
+  const s = smooth(sens.filter(p => p[0] >= d0 && p[0] < d1 && p[1] != null));
+  const nowPos = S.now >= d0 && S.now < d1 ? `<span class="now" style="left:${(S.now - d0) / (d1 - d0) * 100}%"></span>` : "";
+  return `<div class="wline"><svg viewBox="0 0 1000 46" preserveAspectRatio="none">
+    <path d="${path(fc)}" fill="none" stroke="var(--chart)" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>
+    ${s.length ? `<path d="${curve(s)}" fill="none" stroke="#ea580c" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity=".9" vector-effect="non-scaling-stroke"/>` : ""}</svg>
+    <span class="rng">${fmt(hi)}</span><span class="rng b">${fmt(lo)}</span>${nowPos}</div>`;
+}
+
+// опади по годинах — стовпчики (висота = мм/год, колір = сила); помаранчева смуга знизу — датчик «вологість ≥ 93%» (повітря насичене)
+function rainBars(d0, d1, hours, F, hum) {
+  const mm = hours.map(h => h[F.precipitation] || 0), top = Math.max(2, ...mm);
+  const col = v => v < .5 ? "#93c5fd" : v < 2.5 ? "#3b82f6" : v < 7.6 ? "#1d4ed8" : "#7c3aed";
+  const W = (d1 - d0), x = t => (t - d0) / W * 100;
+  // погодинне значення Open-Meteo — опади за попередню годину, тож стовпчик стоїть на [t−1 год, t)
+  const bars = hours.map(h => { const v = h[F.precipitation] || 0; if (!v) return "";
+    const pp = h[F.precipitation_probability];
+    return `<b style="left:${x(h[0] - 36e5)}%;width:${100 / 24}%;height:${Math.max(6, v / top * 100)}%;background:${col(v)}" title="${fmtT(h[0] - 36e5)}–${hhmm(h[0])}: ${v} мм${pp != null ? `, імовірність ${pp}%` : ""}"></b>`; }).join("");
+  let wet = "";
+  for (let i = 0; i < (hum || []).length; i++) {
+    const [t, v] = hum[i], t2 = i + 1 < hum.length ? hum[i + 1][0] : Math.min(S.now, t + 36e5);
+    if (v >= 93 && t2 > d0 && t < d1) wet += `<u style="left:${x(Math.max(t, d0))}%;width:${x(Math.min(t2, d1)) - x(Math.max(t, d0))}%" title="датчик ${v}%"></u>`;
+  }
+  const nowPos = S.now >= d0 && S.now < d1 ? `<span class="now" style="left:${x(S.now)}%"></span>` : "";
+  return `<div class="rain">${bars}${wet}<span class="rng">${mm.some(v => v) ? `${+top.toFixed(1)} мм/год` : "без опадів"}</span>${nowPos}</div>`;
+}
+
+let wTab = "today";
+async function renderWeather() {
+  const el = document.getElementById("weather");
+  const R = await api("/api/weather").catch(() => null), W = R && R.weather;
+  if (!W || !W.days.length) { el.hidden = true; return; }
+  el.hidden = false;
+  const F = Object.fromEntries(W.fields.map((f, i) => [f, i])), sn = W.sensor || {}, cur = W.current || {};
+  const sT = sn.temp_series || [], sH = sn.hum_series || [];
+  const deg = v => `${Math.round(v)}°`, pct = v => `${Math.round(v)}%`;
+  const dayRow = (d, withSensor) => {
+    const H = d.hours, temps = H.map(h => h[F.temperature_2m]);
+    const tT = withSensor ? sT : [], tH = withSensor ? sH : [];
+    const all = temps.concat(tT.map(p => p[1])), lo = Math.floor(Math.min(...all)) - 1, hi = Math.ceil(Math.max(...all)) + 1;
+    const pp = Math.max(...H.map(h => h[F.precipitation_probability] || 0)), mm = H.reduce((a, h) => a + (h[F.precipitation] || 0), 0);
+    const sky = [0,3,6,9,12,15,18,21].map(i => { const h = H[i + 1] || H[i]; if (!h) return `<i></i>`;
+      const w = wmo(h[F.weather_code]); return `<i class="${w[3]}" title="${esc(w[2])}">${w[1]} ${Math.round(h[F.temperature_2m])}°</i>`; }).join("");
+    const nowPos = S.now >= d.day && S.now < d.end ? `<span class="now" style="left:${(S.now - d.day) / (d.end - d.day) * 100}%"></span>` : "";
+    return `<div class="sched-day"><div class="lbl">${esc(d.label)}<span>${Math.round(Math.min(...temps))}…${Math.round(Math.max(...temps))}°${pp ? ` · опади ${pp}%${mm ? `, ${mm.toFixed(1)} мм` : ""}` : ""}</span></div>
+      <div class="bars"><span class="cap">Небо</span><div class="sky">${sky}${nowPos}</div>
+      <span class="cap">Опади</span>${rainBars(d.day, d.end, H, F, tH)}
+      <span class="cap">Темп.</span>${wLine(d.day, d.end, H.map(h => [h[0], h[F.temperature_2m]]), tT, lo, hi, deg)}
+      <span class="cap">Волог.</span>${wLine(d.day, d.end, H.map(h => [h[0], h[F.relative_humidity_2m]]), tH, 0, 100, pct)}</div></div>`;
+  };
+  const ticks = `<div class="ticks">${[0,3,6,9,12,15,18,21].map(h => `<span class="${h % 6 ? "x" : ""}">${String(h).padStart(2,"0")}:00</span>`).join("")}</div>`;
+  const legendRain = `<span><i style="background:#93c5fd"></i>&lt;0.5</span><span><i style="background:#3b82f6"></i>слабкий &lt;2.5</span>
+      <span><i style="background:#1d4ed8"></i>помірний &lt;7.6</span><span><i style="background:#7c3aed"></i>сильний, мм/год</span>`;
+  let body = "";
+  if (wTab === "today") {
+    const w = wmo(cur.code), rn = W.rain || {};
+    const diff = sn.temp != null && cur.temp != null ? ` · різниця ${(sn.temp - cur.temp > 0 ? "+" : "")}${(sn.temp - cur.temp).toFixed(1)}°` : "";
+    // плитки «зараз»: опади · датчик · прогноз · різниця
+    const rIco = rn.rain ? (/сніг/.test(rn.text) ? "🌨" : "🌧") : (rn.hum >= 97 ? "🌫" : "☂️");
+    const rTitle = rn.rain ? `${/сніг/.test(rn.text) ? "Сніг" : "Дощ"}, ${rn.level}` : rn.hum >= 97 ? "Можлива мряка" : "Опадів немає";
+    const rSub = rn.rain ? (rn.mmh ? `~${rn.mmh} мм/год` : "за прогнозом") + (rn.hum != null ? (rn.confirmed ? " · датчик підтверджує" : " · датчик сумнівається") : "")
+      : rn.hum >= 97 ? "за прогнозом сухо, але повітря насичене" : "за прогнозом Open-Meteo";
+    const sgn = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1).replace(/\.0$/, "");
+    const tile = (cls, ico, cap, big, sub) => `<div class="wt ${cls}"><span class="wi">${ico}</span><div><small>${cap}</small><b>${big}</b><span>${sub}</span></div></div>`;
+    body = `<div class="wtiles">
+      ${tile(rn.rain ? "wet" : "", rIco, "Зараз", esc(rTitle), esc(rSub))}
+      ${sn.temp != null ? tile(sn.online ? "" : "dim", "🌡", `Датчик «${esc(sn.name)}»`, `${sn.temp}° <em>💧 ${sn.hum ?? "—"}%</em>`,
+          sn.online ? (sn.ts ? `виміряно о ${fmtT(sn.ts)}` : "") : "офлайн — останнє значення") : ""}
+      ${cur.temp != null ? tile("", w[1], "Прогноз", `${+cur.temp.toFixed(1)}° <em>💧 ${cur.hum}%</em>`,
+          `${esc(w[2])} · відчувається ${Math.round(cur.feels)}° · вітер ${Math.round(cur.wind)} м/с`) : ""}
+      ${sn.temp != null && cur.temp != null ? tile("", "↔️", "Датчик − прогноз", `${sgn(sn.temp - cur.temp)}° <em>${sgn((sn.hum ?? 0) - (cur.hum ?? 0))}%</em>`, "температура · вологість") : ""}
+    </div>
+      ${dayRow(W.days[0], true)}${ticks}
+      <div class="legend"><span><i style="background:none;border-top:2px dashed var(--chart);height:0;border-radius:0"></i>прогноз</span>
+        <span><i style="background:none;border-top:2px solid #ea580c;height:0;border-radius:0"></i>датчик «${esc(sn.name || "Назовні")}»</span>
+        <span><i style="background:#ea580c;opacity:.7;height:2px"></i>датчик ≥ 93% — повітря насичене (дощ/туман)</span>${legendRain}</div>`;
+  } else if (wTab === "tomorrow") {
+    body = W.days[1] ? `${dayRow(W.days[1], false)}${ticks}<div class="legend">
+        <span><i style="background:none;border-top:2px dashed var(--chart);height:0;border-radius:0"></i>прогноз</span>${legendRain}</div>`
+      : `<div class="muted">Прогнозу на завтра ще немає</div>`;
+  } else {
+    const D = Object.fromEntries(W.daily_fields.map((f, i) => [f, i])), wk = W.week || [];
+    const lo = Math.min(...wk.map(r => r[D.temperature_2m_min])), hi = Math.max(...wk.map(r => r[D.temperature_2m_max]));
+    const top = Math.max(2, ...wk.map(r => r[D.precipitation_sum] || 0));
+    body = `<div class="week">${wk.map(r => { const w = wmo(r[D.weather_code]), mn = r[D.temperature_2m_min], mx = r[D.temperature_2m_max];
+      const p = r[D.precipitation_sum] || 0, pp = r[D.precipitation_probability_max] || 0;
+      const name = new Date(r[0]).toLocaleDateString("uk-UA", {weekday: "short", day: "2-digit", month: "2-digit"});
+      return `<div class="wday"><b>${esc(name)}</b><span class="ico" title="${esc(w[2])}">${w[1]}</span><span class="small">${esc(w[2])}</span>
+        <div class="trng"><i style="left:${(mn - lo) / (hi - lo || 1) * 100}%;right:${(hi - mx) / (hi - lo || 1) * 100}%"></i></div>
+        <span>${Math.round(mn)}…${Math.round(mx)}°</span>
+        <div class="pbar"><i style="height:${p ? Math.max(6, p / top * 100) : 0}%"></i></div>
+        <span class="small muted">${p ? `${p.toFixed(1)} мм · ${pp}%` : pp ? `опади ${pp}%` : "без опадів"}</span>
+        <span class="small muted">вітер до ${Math.round(r[D.wind_speed_10m_max])} м/с</span></div>`; }).join("")}</div>`;
+  }
+  el.innerHTML = `<div class="sec-head"><h2>Погода · ${esc(W.place || "")}</h2>
+      <span class="seg" id="wtabs">${[["today","Сьогодні"],["tomorrow","Завтра"],["week","Тиждень"]].map(([k, t]) =>
+        `<button data-w="${k}" class="${k === wTab ? "on" : ""}">${t}</button>`).join("")}</span>
+      <span class="small muted">прогноз Open-Meteo · оновлено ${W.fetched ? fmtT(W.fetched) : "—"}</span></div>${body}`;
+  el.querySelectorAll("#wtabs button").forEach(b => b.onclick = () => { wTab = b.dataset.w; renderWeather(); });
+}
+
+async function renderSchedule() {
+  const sc = S.schedule, el = document.getElementById("sched");
+  if (!sc || !sc.days.length) { el.hidden = true; return; }
+  el.hidden = false;
+  const A = await api("/api/actual").catch(() => ({now: S.now, off: [], unknown: []}));
+  const next = sc.next_off;
+  const nextTxt = next ? (next[0] <= S.now ? `Зараз за графіком світла немає — до ${hhmm(next[1])}`
+    : `Наступне відключення: ${fmtT(next[0], 1)}–${hhmm(next[1])} (через ${dur(next[0] - S.now)})`) : "Відключень за графіком немає";
+  const rows = sc.days.map(d => {
+    const nowPos = S.now >= d.day && S.now < d.day + 864e5 ? `<span class="now" style="left:${(S.now - d.day) / 864e5 * 100}%"></span>` : "";
+    const off = d.off.map(([a, b]) => `${fmtT(a)}–${hhmm(b)}`).join(", ") || "без відключень";
+    return `<div class="sched-day"><div class="lbl">${esc(d.label)}<span>${esc(off)}</span></div>
+      <div class="bars"><span class="cap">ДТЕК</span><div class="bar48">${d.slots.map(s => `<i class="${s === "on" ? "" : s}"></i>`).join("")}${nowPos}</div>
+      <span class="cap">Факт</span>${factBar(d.day, A)}</div></div>`;
+  }).join("");
+  el.innerHTML = `<div class="sec-head"><h2>Графік відключень · черга ${esc(sc.group)}</h2>
+      <span class="small muted">${esc(sc.address)} · ДТЕК оновив ${esc(sc.update || "—")}</span></div>
+    <div class="next">${nextTxt}</div>${rows}
+    <div class="ticks">${[0,3,6,9,12,15,18,21].map(h => `<span class="${h % 6 ? "x" : ""}">${String(h).padStart(2,"0")}:00</span>`).join("")}</div>
+    <div class="legend"><span><i></i>світло є</span><span><i class="off"></i>світла немає</span><span><i class="maybe"></i>можливе відключення</span>
+      <span><i style="background:var(--muted);opacity:.45"></i>факт невідомий (немає інтернету)</span>
+      <span><i style="background:repeating-linear-gradient(45deg,var(--grid) 0 3px,transparent 3px 6px);border:1px solid var(--line)"></i>немає даних</span></div>`;
+}
+
+function analogSeries() {
+  const list = [];
+  for (const dev of S.devices) for (const d of dev.dps) if (isAnalog(d)) list.push({dev, d, key: `${dev.id}:${d.code}`});
+  // напруга першою, далі температура, вологість, решта
+  const rank = c => /voltage/.test(c) ? 0 : /temp/.test(c) ? 1 : /humid|content/.test(c) ? 2 : 3;
+  return list.sort((a, b) => rank(a.d.code) - rank(b.d.code) || (b.dev.online - a.dev.online));
+}
+
+function chartSvg(box, pts, d, opts) {
+  const W = Math.max(300, box.clientWidth || 600), H = W > 600 ? 200 : 160, L = 40, R = 6, T = 8, B = 20;
+  const t0 = S.now - range * 36e5, t1 = S.now;
+  let lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1]));
+  const th = opts.thresholds || [];
+  if (th.length) { lo = Math.min(lo, th[0] + 10); hi = Math.max(hi, th[1] + 2); }
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const x = t => L + (W - L - R) * (t - t0) / (t1 - t0), y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  let path = "";
+  pts.forEach(([t, v], i) => { path += (i ? "L" : "M") + `${x(t).toFixed(1)},${y(v).toFixed(1)}`; });
+  const ticks = [lo, (lo + hi) / 2, hi].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/>
+    <text x="${L - 5}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${+v.toFixed(1)}</text>`).join("");
+  const thr = th.filter(v => v >= lo && v <= hi).map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--bad)" stroke-dasharray="4 4" opacity=".7"/>`).join("");
+  const xs = W > 500 ? [0, .25, .5, .75, 1] : [0, .5, 1];
+  const xl = xs.map((f, i) => { const t = t0 + (t1 - t0) * f;
+    return `<text x="${x(t)}" y="${H - 5}" font-size="10" fill="var(--muted)" text-anchor="${i === 0 ? "start" : i === xs.length - 1 ? "end" : "middle"}">${fmtT(t, range > 24)}</text>`; }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label(d))}">${ticks}${thr}
+    <path d="${path}" fill="none" stroke="var(--chart)" stroke-width="2" stroke-linejoin="round"/>${xl}</svg>`;
+}
+
+// Графіки згорнуті; розгортаються натиском на заголовок. Що розгорнуто — пам'ятає браузер.
+// Під час автооновлення картки не перебудовуються (лише значення й розгорнуті графіки) — нічого не блимає.
+const OPEN_KEY = "tuyahome.charts.open";
+let openCharts = new Set();
+try { openCharts = new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]")); } catch (e) {}
+const saveOpen = () => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openCharts])); } catch (e) {} };
+let chartKeys = "";
+
+async function drawChart(card, s) {
+  const box = card.querySelector(".box"), note = card.querySelector(".ch-note");
+  const off = s.dev.online ? "" : ` · прилад офлайн ${dur(S.now - (s.dev.offline_since || S.now))}`;
+  const {series: hist} = await api("/api/series", {s: s.key, h: range});
+  const pts = (hist[s.key] || []).filter(p => typeof p[1] === "number");
+  if (pts.length < 2) { box.innerHTML = ""; note.textContent = `Історія накопичується${off}`; return; }
+  box.innerHTML = chartSvg(box, pts, s.d, {thresholds: /voltage/.test(s.d.code) ? [S.thresholds.voltage_low, S.thresholds.voltage_high] : []});
+  const vals = pts.map(p => p[1]);
+  note.textContent = `мін ${Math.min(...vals)} · макс ${Math.max(...vals)} ${unit(s.d.unit)} · ${pts.length} точок${off}`;
+}
+
+const isTemp = c => /temp/.test(c), isHum = c => /humid|prm_content/.test(c);
+function chartCard(s, order) {
+  return `<div class="card chart ${openCharts.has(s.key) ? "open" : ""}" data-chart="${esc(s.key)}" data-pair="${isTemp(s.d.code) || isHum(s.d.code) ? s.dev.id : ""}" style="order:${order}">
+      <div class="ch-head"><span class="chev">▶</span><span class="name">${esc(label(s.d))} · ${esc(s.dev.name)}</span><button class="info" data-devinfo="${s.dev.id}" title="Усе про прилад">ⓘ</button>
+        <span class="val"></span></div>
+      <div class="body"><div class="box"></div><div class="ch-note"></div></div></div>`;
+}
+const emptyCard = (txt, order) => `<div class="card chart empty" style="order:${order}"><div class="ch-head"><span class="name">${esc(txt)}</span><span class="val">—</span></div></div>`;
+
+async function renderCharts(redraw = true) {
+  const series = analogSeries(), wrap = document.getElementById("charts");
+  const keys = series.map(s => s.key).join(",");
+  if (keys !== chartKeys) {   // набір рядів змінився — будуємо каркас заново
+    chartKeys = keys;
+    // пари по приміщенню (приладу): температура | вологість; порядок — кімнати Smart Life, далі назва
+    const rooms = S.tuya_room_order || [], roomOf = id => (S.tuya_rooms || {})[id];
+    const devs = [...new Map(series.filter(s => isTemp(s.d.code) || isHum(s.d.code)).map(s => [s.dev.id, s.dev])).values()]
+      .sort((a, b) => ((rooms.indexOf(roomOf(a.id)) + 1 || 999) - (rooms.indexOf(roomOf(b.id)) + 1 || 999)) || a.name.localeCompare(b.name, "uk"));
+    let t = "", h = "";
+    devs.forEach((dev, i) => {
+      const ts = series.find(s => s.dev.id === dev.id && isTemp(s.d.code)), hs = series.find(s => s.dev.id === dev.id && isHum(s.d.code));
+      t += ts ? chartCard(ts, i * 2) : emptyCard(`Температура · ${dev.name}: немає`, i * 2);
+      h += hs ? chartCard(hs, i * 2 + 1) : emptyCard(`Вологість · ${dev.name}: немає`, i * 2 + 1);
+    });
+    const other = series.filter(s => !isTemp(s.d.code) && !isHum(s.d.code)).map((s, i) => chartCard(s, i)).join("");
+    wrap.innerHTML = `<div class="ccol pair"><h3>🌡️ Температура</h3>${t}</div><div class="ccol pair"><h3>💧 Вологість</h3>${h}</div>`
+      + `<div class="ccol other"><h3>⚡ Напруга та інше</h3>${other}</div>`;
+  }
+  const jobs = [];
+  for (const s of series) {
+    const card = wrap.querySelector(`[data-chart="${CSS.escape(s.key)}"]`);
+    card.querySelector(".val").innerHTML = `${s.d.value}<small>${esc(unit(s.d.unit))}</small>${s.dev.online ? "" : ` <small>офлайн</small>`}`;
+    if (redraw && openCharts.has(s.key)) jobs.push(drawChart(card, s));
+  }
+  await Promise.all(jobs);
+}
+
+document.getElementById("charts").addEventListener("click", e => {
+  const info = e.target.closest("[data-devinfo]"); if (info) { openDevice(info.dataset.devinfo); return; }
+  const head = e.target.closest(".ch-head"); if (!head) return;
+  const wrap = document.getElementById("charts"), card = head.closest(".chart");
+  if (card.classList.contains("empty")) return;
+  const open = !card.classList.contains("open");
+  // температура й вологість одного приміщення розгортаються разом, щоб рядок лишався рівним
+  const pair = card.dataset.pair;
+  const group = pair ? [...wrap.querySelectorAll(`.chart[data-pair="${CSS.escape(pair)}"]`)] : [card];
+  for (const c of group) {
+    c.classList.toggle("open", open);
+    const key = c.dataset.chart;
+    open ? openCharts.add(key) : openCharts.delete(key);
+    if (open) { const s = analogSeries().find(x => x.key === key); if (s) drawChart(c, s); }
+  }
+  saveOpen();
+});
+
+// основний статус приладу для картки: тривожний/дискретний стан, інакше клімат або напруга
+const MAIN = ["watersensor_state","gas_sensor_status","gas_sensor_state","smoke_sensor_status","smoke_sensor_state",
+  "prm_switch","doorcontact_state","master_state","switch","switch_on","switch_1","pir","switch_mode1","switch_type_1"];
+function mainStatus(dev) {
+  for (const c of MAIN) { const d = dev.dps.find(x => x.code === c); if (d) {
+    const v = String(d.value).toLowerCase();
+    return [`${label(d)}: ${show(dev, d)}`, v === "alarm" ? "alarm" : v === "normal" ? "ok" : ""]; } }
+  const t = dev.dps.find(d => /temp/.test(d.code) && typeof d.value === "number" && !/compens/.test(d.code));
+  const h = dev.dps.find(d => /humid|prm_content/.test(d.code) && typeof d.value === "number");
+  if (t || h) return [[t && `${t.value} °C`, h && `${h.value} %`].filter(Boolean).join(" · "), ""];
+  const v = dev.dps.find(d => /voltage/.test(d.code)); if (v) return [`${v.value} В`, ""];
+  return ["", ""];
+}
+
+function renderDevices() {
+  const power = new Set(S.power_ids || []);
+  const order = d => d.dps.some(x => String(x.value).toLowerCase() === "alarm") ? -1 : d.gateway ? 0 : power.has(d.id) ? 1
+    : d.dps.some(x => /water|gas|smoke/.test(x.code)) ? 2 : 3;
+  // групи за кімнатами Smart Life — у порядку кімнат зі Smart Life; без кімнати — в кінці
+  const roomOf = d => (S.tuya_rooms || {})[d.id] || "Без кімнати";
+  const roomOrder = [...(S.tuya_room_order || []), "Без кімнати"];
+  const groups = {};
+  for (const d of S.devices.filter(d => !d.dps.some(isAnalog))) (groups[roomOf(d)] ||= []).push(d);
+  const names = Object.keys(groups).sort((a, b) => {
+    const alarm = n => groups[n].some(d => d.dps.some(x => String(x.value).toLowerCase() === "alarm")) ? 0 : 1;
+    const ia = roomOrder.indexOf(a), ib = roomOrder.indexOf(b);
+    return alarm(a) - alarm(b) || (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  document.getElementById("devices").innerHTML = names.map(room => {
+    const devs = groups[room].sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name, "uk"));
+    return `<div class="room-head">${esc(room)} <span>${devs.length}</span></div>` + devs.map(dev => devCard(dev, power)).join("");
+  }).join("");
+}
+
+function devCard(dev, power) {
+  {
+    const bat = dev.dps.find(d => BATTERY.test(d.code) && typeof d.value === "number");
+    const batTxt = bat ? `<span class="${bat.value < 20 ? "low" : ""}">🔋 ${bat.value}${bat.value <= 100 ? " %" : ""}</span>` : "";
+    const st = dev.online ? "онлайн" : `офлайн ${dev.offline_since ? dur(S.now - dev.offline_since) : ""}`;
+    const [main, cls] = mainStatus(dev);
+    const tag = dev.gateway ? `<span class="tag key">інтернет</span>` : power.has(dev.id) ? `<span class="tag key">світло</span>` : "";
+    return `<div class="card dev" data-dev="${dev.id}"><div class="dev-head"><span class="dot ${dev.online ? "" : "off"}"></span>
+      <span class="dev-name">${ICON[dev.category] || ""} ${esc(dev.name)}</span>${tag}</div>
+      <div class="dev-sub"><span>${st}</span>${batTxt}</div>${main ? `<div class="main ${cls}">${esc(main)}</div>` : ""}</div>`;
+  }
+}
+
+// --- вікно приладу: усе, що можна витягнути з Tuya
+const INFO_LABEL = {product_id:"ID продукту", model:"Модель", uuid:"UUID", node_id:"Zigbee node", ip:"IP (зовнішній)",
+  time_zone:"Часовий пояс", active_time:"Активовано", create_time:"Додано", update_time:"Оновлено в Tuya", biz_type:"biz_type",
+  owner_id:"ID дому", lat:"Широта", lon:"Довгота", icon:"Іконка"};
+const fmtSec = v => typeof v === "number" ? fmtT(v < 1e12 ? v * 1000 : v, 1) : v;
+async function openDevice(id) {
+  const M = document.getElementById("modal"), body = document.getElementById("sheet");
+  body.innerHTML = `<div class="top"><h3>…</h3><button class="x" data-close>×</button></div>`; M.classList.add("on");
+  let r; try { r = await api("/api/device", {id}); } catch (e) { body.innerHTML += `<p>Не вдалося завантажити: ${esc(e.message)}</p>`; return; }
+  const dev = r.device, model = r.model || {};
+  const bat = dev.dps.find(d => BATTERY.test(d.code) && typeof d.value === "number");
+  const rng = d => d.range ? d.range.join(" / ") : (d.min !== undefined || d.max !== undefined)
+    ? `${d.min ?? ""}…${d.max ?? ""}${d.scale ? ` (÷10^${d.scale})` : ""}` : "";
+  const rows = dev.dps.map(d => { const m = model[d.code] || {}, a = String(d.value).toLowerCase();
+    return `<tr><td>${esc(LABEL[d.code] || d.code)}${m.name || d.name ? `<br><code>${esc(m.name || d.name)}</code>` : ""}</td>
+      <td class="v" style="color:${a === "alarm" ? "var(--bad)" : a === "normal" ? "var(--ok)" : "inherit"}">${esc(show(dev, d))}</td>
+      <td><code>${esc(JSON.stringify(d.raw))}</code></td><td><code>${esc(d.code)}</code><br><code>DP ${d.dp_id ?? "—"}</code></td>
+      <td>${esc(d.type || "")}${d.unit ? ` · ${esc(unit(d.unit))}` : ""}</td><td>${esc(rng(d))}</td>
+      <td>${d.access === "rw" || d.access === "wr" ? "читання + зміна" : d.access === "ro" ? "лише читання" : esc(d.access || "")}</td></tr>`; }).join("");
+  const info = Object.entries(dev.info || {}).map(([k, v]) => `<span>${esc(INFO_LABEL[k] || k)}</span><span>${esc(/time$/.test(k) ? fmtSec(v) : v)}</span>`).join("");
+  const analog = dev.dps.filter(d => typeof d.value === "number" && !BATTERY.test(d.code) && !SETTINGS.test(d.code));
+  body.innerHTML = `<div class="top"><span style="font-size:26px">${ICON[dev.category] || "●"}</span><h3>${esc(dev.name)}</h3><button class="x" data-close>×</button></div>
+    <div><span class="pill ${dev.online ? "on" : "off"}">${dev.online ? "онлайн" : "офлайн"}${dev.online && dev.online_since ? ` з ${fmtT(dev.online_since, 1)}` : !dev.online && dev.offline_since ? ` ${dur(r.now - dev.offline_since)}` : ""}</span>
+      ${bat ? `<span class="pill ${bat.value < 20 ? "off" : ""}">🔋 ${bat.value}${bat.value <= 100 ? " %" : ""}</span>` : ""}
+      ${r.tuya_room ? `<span class="pill">кімната: ${esc(r.tuya_room)}</span>` : `<span class="pill">кімната не задана в Smart Life</span>`}
+      <span class="pill">${dev.gateway ? "хаб" : dev.mains ? "живлення від мережі" : "батарея"}</span>${dev.sub ? `<span class="pill">Zigbee через хаб</span>` : ""}
+      <span class="pill">${esc(dev.product || "")}</span><span class="pill">категорія ${esc(dev.category)}</span></div>
+    <h4>Параметри (${dev.dps.length})</h4>
+    <div class="scroll"><table class="tbl"><tr><th>Параметр</th><th>Значення</th><th>Сире</th><th>Код</th><th>Тип</th><th>Діапазон</th><th>Доступ</th></tr>${rows}</table></div>
+    ${analog.length ? `<h4>Графіки · 24 год</h4>${analog.map(d => `<div class="mini" data-mini="${esc(d.code)}"><div class="ttl">${esc(label(d))}: ${esc(show(dev, d))}</div><div class="box"></div><div class="ch-note"></div></div>`).join("")}` : ""}
+    <h4>Пристрій</h4><div class="kv"><span>ID</span><span>${esc(dev.id)}</span>${info}
+      <span>Оновлено в системі</span><span>${dev.seen ? fmtT(dev.seen, 1) : "—"}</span></div>
+    <h4>Події (${r.events.length})</h4><ul class="list">${r.events.map(e => `<li><span class="t">${fmtT(e.ts, 1)}</span><span>${esc(e.text)}</span></li>`).join("") || `<li class="dim">немає</li>`}</ul>`;
+  for (const d of analog) {
+    const el = body.querySelector(`[data-mini="${CSS.escape(d.code)}"]`);
+    const {series: h} = await api("/api/series", {s: `${dev.id}:${d.code}`, h: 24});
+    const pts = (h[`${dev.id}:${d.code}`] || []).filter(p => typeof p[1] === "number");
+    if (pts.length < 2) { el.querySelector(".ch-note").textContent = "історія накопичується"; continue; }
+    const keep = range; range = 24;
+    el.querySelector(".box").innerHTML = chartSvg(el.querySelector(".box"), pts, d, {thresholds: /voltage/.test(d.code) ? [S.thresholds.voltage_low, S.thresholds.voltage_high] : []});
+    range = keep;
+  }
+}
+document.addEventListener("click", e => {
+  const card = e.target.closest(".dev[data-dev]"); if (card) openDevice(card.dataset.dev);
+  if (e.target.matches("[data-close]") || e.target.id === "modal") document.getElementById("modal").classList.remove("on");
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") document.getElementById("modal").classList.remove("on"); });
+
+async function renderLists() {
+  const {events} = await api("/api/events", {n: 300});
+  const week = S.now - 7 * 864e5;
+  const sum = (kind, cur) => events.filter(e => e.kind === kind && e.end > week).reduce((a, e) => a + e.end - Math.max(e.start, week), 0)
+    + (cur ? S.now - Math.max(cur, week) : 0);
+  const hub = S.devices.find(d => d.gateway);
+  const netDown = hub && !hub.online && S.internet && !S.internet.up ? S.internet.since : null;
+  document.getElementById("out-sum").textContent =
+    `За 7 днів: без світла ${dur(sum("outage_end", S.outage?.start))} · без інтернету ${dur(sum("internet_up", netDown))}`;
+  const cur = [];
+  if (S.outage) cur.push(`<li><span class="t">${fmtT(S.outage.start, 1)}</span><span><span class="kind power">світло</span><b>зараз немає</b> · ${dur(S.now - S.outage.start)}</span></li>`);
+  if (netDown) cur.push(`<li><span class="t">${fmtT(netDown, 1)}</span><span><span class="kind net">інтернет</span><b>зараз немає</b> · ${dur(S.now - netDown)}</span></li>`);
+  const past = events.filter(e => e.kind === "outage_end" || e.kind === "internet_up").map(e => {
+    const k = e.kind === "outage_end" ? ["power", "світло"] : ["net", "інтернет"];
+    return `<li><span class="t">${fmtT(e.start, 1)}</span><span><span class="kind ${k[0]}">${k[1]}</span>до ${fmtT(e.end)} · ${dur(e.end - e.start)}</span></li>`;
+  });
+  document.getElementById("outages").innerHTML = cur.concat(past).join("") || `<li class="dim">Поки не було</li>`;
+  document.getElementById("events").innerHTML = events.slice(0, 80).map(e =>
+    `<li class="${["online","offline"].includes(e.kind) ? "dim" : ""}"><span class="t">${fmtT(e.ts, 1)}</span><span>${esc(e.text)}</span></li>`).join("")
+    || `<li class="dim">Подій ще немає</li>`;
+}
+
+function renderQuota() {
+  const u = S.usage || {calls: 0}, p = S.plan;
+  if (!p) return;
+  const pct = Math.min(100, 100 * u.calls / p.quota);
+  const note = p.log_disabled ? " Детальна історія вимкнена, щоб не перевищити ліміт."
+    : p.log_factor > 1 ? ` Детальні інтервали розтягнуто ×${p.log_factor.toFixed(2)}.` : "";
+  document.getElementById("quota").innerHTML = `<div>${u.calls} з ${p.quota} запитів за ${u.month || "місяць"}</div>
+    <div class="bar"><div style="width:${pct}%"></div></div>
+    <div class="muted">План: ~${p.total} на місяць (бюджет ${p.budget}). Знімок раз на ${p.snapshot_every_min} хв.${note}</div>`;
+}
+
+const RANGES = [[6,"6 год"],[24,"24 год"],[168,"7 д"],[720,"30 д"]];
+function renderRanges() {
+  document.getElementById("ranges").innerHTML = RANGES.map(([h, t]) => `<button class="${h === range ? "on" : ""}" data-h="${h}">${t}</button>`).join("");
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-h]");
+  if (b) { range = +b.dataset.h; renderRanges(); renderCharts(); }
+});
+let rz, lastW = innerWidth;
+addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rz); rz = setTimeout(renderCharts, 250); });
+
+// --- вид: «Показники» (за замовчуванням) або «Датчики і прилади»; браузер пам'ятає останній
+const VIEW_KEY = "tuyahome.view";
+function setView(v) {
+  document.getElementById("views").dataset.view = v;
+  try { localStorage.setItem(VIEW_KEY, v); } catch (e) {}
+  if (v === "analog" && S) { chartKeys = ""; renderCharts(); }  // приховані графіки мали нульову ширину — перемалювати
+  document.getElementById("views").scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+document.getElementById("to-discrete").onclick = () => setView("discrete");
+document.getElementById("to-analog").onclick = () => setView("analog");
+try { if (localStorage.getItem(VIEW_KEY) === "discrete") document.getElementById("views").dataset.view = "discrete"; } catch (e) {}
+
+async function load() {
+  try {
+    S = await api("/api/state");
+    document.getElementById("err").style.display = "none";
+    renderHeader(); renderDevices(); renderQuota(); renderRanges();
+    await Promise.all([renderSchedule(), renderWeather(), renderCharts(), renderLists()]);
+  } catch (e) {
+    const el = document.getElementById("err"); el.style.display = "block"; el.textContent = `Не вдалося оновити: ${e.message}`;
+  }
+}
+load(); setInterval(load, 60000);
+</script>
+</body>
+</html>

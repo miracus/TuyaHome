@@ -1,0 +1,9 @@
+.env
+out/
+__pycache__/
+infra/.terraform/
+infra/terraform.tfstate*
+infra/terraform.tfvars
+infra/build/
+infra/tfplan
+*.tfvars
