@@ -1,60 +1,57 @@
 # TuyaHome
 
-**Personal project.** Serverless monitoring of a Tuya Smart Life home through Ukrainian power outages, with a Telegram bot for the family.
+Свій дашборд, Telegram-бот і сповіщення для приладів Tuya Smart Life — зроблено під реалії України:
+**відключення світла**, графіки ДТЕК, повітряні тривоги.
 
-- Detects power and internet outages from device presence within 2–3 minutes; compares them with the DTEK outage schedule
-- Air-raid alerts per user region, weather forecast vs. outdoor sensor, voltage/temperature/humidity dashboard
-- Stays inside the 26,000-call monthly Tuya API quota with a per-device polling planner
-- Python, AWS Lambda, DynamoDB, EventBridge, Terraform; runs at about $0/month on the AWS free tier
-
-Full functional spec (Ukrainian): [docs/FUNCTIONAL_SPEC.md](docs/FUNCTIONAL_SPEC.md). Secrets and personal data are not part of this repository.
-
----
-
-
-Свій дашборд і сповіщення для приладів Tuya Smart Life: напруга, температура, тривоги, **відключення світла**.
+- **Світло й інтернет** — визначає відключення за присутністю приладів (розетка + свідки від мережі), порівнює з графіком ДТЕК,
+  пише, коли за графіком повернуть світло і коли варто звертатись до ДТЕК; відсіює хибні спрацювання від збоїв Zigbee.
+- **Тривоги** — регіони в кожного користувача свої; рівень жовтий/червоний; скільки було тихо.
+- **Погода** — прогноз Open-Meteo vs вуличний датчик, «чи йде дощ», тиждень наперед.
+- **Історія** — світло (графік vs факт), погода, тривоги за день / місяць / рік / свій період;
+  **рейтинг найбезпечніших міст** (> 50 тис.) за 365 днів без зберігання історії — лише лічильники по днях.
+- **Ігри** — «Пляшечки» (рівні, боси, рідина з фізикою на canvas) і шашки проти комп'ютера з рекордами.
+- **Telegram-бот** — сповіщення кожному в особистий чат, керування нижніми кнопками, ролі «дім» / «гість».
+- **Квота Tuya** — вкладається в 26 000 запитів на місяць завдяки плануванню опитувань по приладах.
 
 ```
-EventBridge (раз на snapshot_every_min) → Lambda poller → Tuya Cloud API
-                                              ↓
-                                         DynamoDB ← Lambda web (Function URL, https) ← браузер/телефон
-                                              ↓
-                                         Telegram (сповіщення)
+EventBridge (кожні 2 хв) → Lambda poller → Tuya Cloud API, ДТЕК (дзеркало), siren.pp.ua, Open-Meteo
+                                  ↓
+                             DynamoDB ← Lambda web (Function URL, https, ключ) ← браузер / Telegram Web App
+                                  ↓
+                             Telegram-бот (сповіщення, кнопки)
 ```
+
+Python 3.13 · AWS Lambda · DynamoDB · EventBridge · Terraform · vanilla JS (canvas) — вкладається в безкоштовний рівень AWS.
 
 ## Файли
 
 | Шлях | Що це |
 |---|---|
-| `app/config.json` | **усі налаштування**: інтервали опитування по приладах і параметрах, ліміт квоти, пороги напруги, коди тривог |
-| `app/poller.py` | опитувач: знімок усіх приладів, детальні журнали, запобіжник квоти |
-| `app/budget.py` | планувальник квоти; `python app/budget.py` — кошторис запитів на місяць |
-| `app/rules.py` | правила подій: світло, тривоги, напруга, батареї, офлайн |
-| `app/web.py`, `app/dashboard.html` | дашборд і JSON API (лише з ключем `?k=`) |
+| `app/config.json` | **усі налаштування**: опитування, квота, пороги, графік ДТЕК, тривоги, погода |
+| `app/poller.py` | опитувач: знімок приладів, журнали, графік, тривоги, погода, рейтинг міст |
+| `app/rules.py` | правила подій: світло (з підтвердженням), інтернет, тривоги приладів, напруга, батареї |
+| `app/schedule.py` | графік ДТЕК: зміни, архів, «за графіком / аварійне», наступне відключення |
+| `app/air_alerts.py` | повітряні тривоги по регіонах користувачів |
+| `app/weather.py` | прогноз Open-Meteo, «чи йде дощ», архів погоди |
+| `app/history.py` | вкладка «Історія»: світло, погода, тривоги за період |
+| `app/arank.py` | рейтинг міст за тривогами (лічильники по днях, оновлення раз на добу) |
+| `app/game.py` | рекорди ігор (перевірка підпису Telegram Web App) |
+| `app/bot.py` | Telegram-бот: кнопки, меню налаштувань, тривоги, адреса, звук |
+| `app/web.py`, `app/dashboard.html` | дашборд і JSON API (лише з ключем `?k=`); `&privacy=1` — розмиття особистих даних для знімків |
+| `app/budget.py` | планувальник квоти Tuya |
 | `app/store.py` | DynamoDB у хмарі / JSON-файл локально |
+| `tools/alert_rank_build.py` | одноразове наповнення рейтингу міст за рік (відкритий набір даних + siren.pp.ua) |
 | `infra/` | Terraform: усі ресурси `tuyahome-*`, регіон eu-north-1 |
-| `run_local.py` | локальний запуск без AWS |
-| `dump_devices.py` | повне вивантаження всіх приладів і DP у `out/` |
-
-## Квота Tuya
-
-Ліміт — на запити за місяць (`polling.monthly_api_quota`). Знімок стану всіх приладів — **один** запит
-незалежно від кількості приладів. Детальна історія параметра (`source: log`) — запит на прилад за кожне
-спрацювання. Для кожного приладу × параметра — свій `every_min`. Якщо сума більша за ліміт × `quota_safety_pct`,
-детальні інтервали розтягуються автоматично; знімок (від нього залежить «немає світла») — в останню чергу.
-Під час роботи лічильник реальних запитів не дає піти швидше за план.
+| `docs/FUNCTIONAL_SPEC.md` | повний функціональний опис |
 
 ## Команди
 
 ```bash
-python app/budget.py                 # кошторис запитів
+python app/budget.py                 # кошторис запитів Tuya
 python run_local.py poll             # один цикл локально
 python run_local.py serve            # дашборд на http://localhost:8765/?k=local
-cd infra && terraform plan           # що зміниться в AWS
 cd infra && terraform apply          # розгорнути
-cd infra && terraform output -raw dashboard_url
 cd infra && terraform destroy        # прибрати все tuyahome-*
 ```
 
-`infra/terraform.tfvars` генерується з `.env` (секрети; у git не йде).
-Пробна підписка IoT Core у Tuya періодично закінчується — тоді опитувач шле «Помилка Tuya API»; продовжити в консолі Tuya.
+`infra/terraform.tfvars` генерується з `.env` (секрети; у git не йде). Публічна копія без особистих даних — `python tools/make_github_export.py`.

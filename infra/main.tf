@@ -191,7 +191,7 @@ resource "aws_lambda_function" "web" {
   filename         = data.archive_file.app.output_path
   source_code_hash = data.archive_file.app.output_base64sha256
   timeout          = 30
-  memory_size      = 128
+  memory_size      = 512 # 19.11: на 128 МБ запит дашборда йшов 6–7 с і займав слот з ліміту 10 одночасних (бот не відповідав)
   environment {
     variables = merge(local.app_env, {
       POLLER_FN          = "${var.name}-poller"

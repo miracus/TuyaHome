@@ -128,6 +128,11 @@ def run(store, cfg, notifier, now):
             kinds = ", ".join(TYPES.get(t, t) for t in cur["types"])
             ico, lvl = LEVELS[cur["level"]]
             text = f"🚨 {kinds.capitalize()} ({ico} {lvl}): {name} (з {fmt_time(cur['since'], cfg)})"
+            last = prev.get("last") or {}
+            if last.get("end"):  # скільки було тихо з минулого відбою (лише при новій тривозі, не при зміні рівня)
+                same_day = fmt_time(last["end"], cfg, with_date=True)[:5] == fmt_time(cur["since"], cfg, with_date=True)[:5]
+                text += (f"\n🕊️ Без тривоги було {fmt_duration(max(0, cur['since'] - last['end']))} "
+                         f"(відбій о {fmt_time(last['end'], cfg, with_date=not same_day)})")
             store.add_event(now, {"kind": "air_alert_start", "text": text, "region": name, "start": cur["since"], "level": cur["level"]})
             notify(text, cur["since"])
         elif cur["active"] and prev.get("active") and prev.get("level") and prev["level"] != cur["level"]:

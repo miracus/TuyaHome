@@ -220,7 +220,31 @@ def cmd_dashboard(c):
 
 @command("weather", "🌤 Погода: прогноз і датчик «Назовні»")
 def cmd_weather(c):
+    # власна адреса далеко від дому (або гість) — лише прогноз для адреси, без датчика й поточного стану
+    u = c.get("u") or {}
+    a = u.get("addr") or {}
+    if a.get("label") and a.get("lat") is None and c.get("uid"):
+        # адреса збережена до 17.11 — без координат: геокодуємо назву один раз і дописуємо
+        try:
+            g = address.geocode(text=a["label"])
+            if g:
+                users = get_users(c["store"])
+                users[c["uid"]].setdefault("addr", {}).update(lat=g["lat"], lon=g["lon"])
+                save_users(c["store"], users)
+                u = users[c["uid"]]
+        except Exception as e:
+            print(f"weather geocode: {type(e).__name__}: {e}")
+    loc = weather.user_location(u, c["cfg"])
+    if loc:
+        return weather.forecast_text(c["store"], c["cfg"], c["now"], *loc)
+    if u.get("access") == "guest":
+        return "🌤 Прогноз погоди — для вашої адреси. Вкажіть її: ⚙️ Налаштування → 📍 Моя адреса."
     return weather.weather_text(c["store"], c["cfg"], c["now"], c["states"])
+
+
+@command("settings", "⚙️ Налаштування: адреса, звук, користувачі")
+def cmd_settings(c):
+    return None  # кнопки — у handle_update (settings_view)
 
 
 @command("help", "Що вміє бот")
@@ -229,23 +253,350 @@ def cmd_help(c):
 
 
 # Кнопки під полем вводу в особистому чаті (Telegram не дозволяє прибрати поле вводу — кнопки замість набору тексту)
-BUTTONS = [["💡 Світло", "🌐 Інтернет"], ["⚡ Напруга", "🩺 Чекап", "🌤 Погода"], ["🚨 Тривоги", "📅 Графік ДТЕК", "🆘 Заявка ДТЕК"],
-           ["📊 Дашборд", "📍 Моя адреса", "🔔 Звук"]]
+# 2026-11-17: «🌐 Інтернет» прибрано (досить сповіщень), «🆘 Заявка ДТЕК» — поки dtek_report вимкнено;
+# «📍 Моя адреса», «🔔 Звук», «👥 Користувачі» — під «⚙️ Налаштування»
+BUTTONS = [["💡 Світло", "⚡ Напруга"], ["🩺 Чекап", "🌤 Погода"], ["🚨 Тривоги", "📅 Графік ДТЕК"],
+           ["📊 Дашборд", "⚙️ Налаштування"]]
 BUTTON_CMD = {"💡 Світло": "light", "🌐 Інтернет": "internet", "⚡ Напруга": "voltage", "🩺 Чекап": "check",
               "🚨 Тривоги": "alerts", "📅 Графік ДТЕК": "schedule", "📊 Дашборд": "dashboard",
               "🌤 Погода": "weather"}
 KEYBOARD = {"keyboard": [[{"text": t} for t in row] for row in BUTTONS], "resize_keyboard": True,
             "is_persistent": True, "input_field_placeholder": "Оберіть кнопку нижче"}
-OWNER_BUTTONS = BUTTONS + [["👥 Користувачі"]]
+OWNER_BUTTONS = BUTTONS
 OWNER_KEYBOARD = {**KEYBOARD, "keyboard": [[{"text": t} for t in row] for row in OWNER_BUTTONS]}
 BUTTON_CMD["👥 Користувачі"] = "users"
 BUTTON_CMD["📍 Моя адреса"] = "address"
 BUTTON_CMD["🔔 Звук"] = "sound"
-BUTTON_CMD["🆘 Заявка ДТЕК"] = "dtek"
+BUTTON_CMD["🆘 Заявка ДТЕК"] = "dtek"  # старі клавіатури, поки не оновились
+BUTTON_CMD["⚙️ Налаштування"] = "settings"
+BUTTON_CMD["⬅️ Назад"] = "back"
 # Гість — лише тривоги й графік для своєї адреси (без даних дому)
-GUEST_BUTTONS = [["🚨 Тривоги", "📅 Графік ДТЕК"], ["📍 Моя адреса", "🔔 Звук"]]
+GUEST_BUTTONS = [["🚨 Тривоги", "📅 Графік ДТЕК"], ["🌤 Погода", "⚙️ Налаштування"]]
 GUEST_KEYBOARD = {**KEYBOARD, "keyboard": [[{"text": t} for t in row] for row in GUEST_BUTTONS]}
-GUEST_CMDS = {"start", "alerts", "schedule", "address", "sound"}
+GUEST_CMDS = {"start", "alerts", "schedule", "address", "sound", "settings", "weather", "back"}
+# у меню команд (синя кнопка «Меню») — те саме, що на кнопках; решта команд працює, але не показується
+MENU_HIDDEN = {"help", "internet", "dtek", "address", "sound", "back"}
+
+
+def settings_keyboard(u):
+    """«⚙️ Налаштування» — не повідомлення в чат, а підміна кнопок унизу; «⬅️ Назад» повертає основні."""
+    rows = [["📍 Моя адреса", "🔔 Звук"]]
+    if u.get("role") == "owner":
+        rows.append(["👥 Користувачі"])
+    rows.append(["⬅️ Назад"])
+    return {**KEYBOARD, "keyboard": [[{"text": t} for t in r] for r in rows], "input_field_placeholder": "⚙️ Налаштування"}
+
+
+def _swap_keyboard(store, notifier, uid, kb, text, msg_id=None):
+    """Підміна нижніх кнопок. Telegram міняє їх лише разом з повідомленням, а якщо це повідомлення стерти —
+    на телефоні кнопки зникають і відкривається звичайна клавіатура (18.11). Тому повідомлення з кнопками
+    лишаємо — одне на людину: нове надсилаємо, попереднє службове стираємо. Натиснутий текст теж стираємо."""
+    if msg_id:
+        notifier.call("deleteMessage", {"chat_id": uid, "message_id": msg_id}, retries=0)
+    ok, r = _send(notifier, uid, text, reply_markup=kb)
+    new_id = (r.get("result") or {}).get("message_id") if ok else None
+    if store is None or not new_id:
+        return
+    users = get_users(store)
+    u = users.get(str(uid))
+    if u is None:
+        return
+    old = u.get("kb_msg")
+    if old and old != new_id:
+        notifier.call("deleteMessage", {"chat_id": uid, "message_id": old}, retries=0)
+    u["kb_msg"] = new_id
+    save_users(store, users)
+
+
+# --- Меню налаштувань нижніми кнопками (18.11): кожен рівень підміняє кнопки, «⬅️ Назад» — на рівень вище.
+# Стан — u["menu"] ("settings" | "sound" | "sound_from" | "sound_to" | "users" | "user:<uid>"); у чат пишеться лише
+# одне службове повідомлення-носій кнопок (див. _swap_keyboard), без інлайн-кнопок.
+BACK = "⬅️ Назад"
+HOME = "🏠 До головного меню"  # екран під головним меню — замість «Назад»; глибше — поруч із «Назад»
+
+
+def _kb(rows, placeholder):
+    return {**KEYBOARD, "keyboard": [[{"text": t} for t in r] for r in rows], "input_field_placeholder": placeholder}
+
+
+def _sound_buttons(u):
+    st = sound_prefs(u)
+    n = st["night"]
+    loud_all = not (st["mute"] or n["on"])
+    return {f"{'✅ ' if loud_all else ''}🔔 Увімкнути звук": "on", f"{'✅ ' if st['mute'] else ''}🔕 Вимкнути звук": "off",
+            f"{'✅ ' if n['on'] else ''}🌙 Нічний {_hh(n['from'])}–{_hh(n['to'])}": "non", "☀️ Вимкнути нічний": "noff",
+            "🕐 Години нічного": "h"}
+
+
+def _user_buttons(users):
+    """Кнопка на кожного, крім власників: «✅ Ім'я» / «⏳ Ім'я» / «⛔ Ім'я» → його екран."""
+    out = {}
+    for tid, t in users.items():
+        if t.get("role") == "owner":
+            continue
+        mark = {"approved": "👤" if t.get("access") == "guest" else "🏠", "pending": "⏳", "denied": "⛔"}.get(t.get("status"), "?")
+        out[f"{mark} {t.get('name', tid)[:28]}"] = tid
+    return out
+
+
+def menu_screen(u, users, cfg, screen, store=None):
+    """(клавіатура, текст службового повідомлення) для екрана меню."""
+    if screen == "alerts" or screen.startswith(("areg:", "acat")):
+        return alerts_screen(store, u, cfg, screen)
+    if screen == "settings":
+        rows = [["📍 Моя адреса", "🔔 Звук"]] + ([["👥 Користувачі"]] if u.get("role") == "owner" else []) + [[BACK]]
+        return _kb(rows, "⚙️ Налаштування"), "⚙️ Налаштування"
+    if screen == "sound":
+        b = list(_sound_buttons(u))
+        return _kb([b[0:2], b[2:4], [b[4]], [BACK]], "🔔 Звук"), sound_view(u, cfg)[0]
+    if screen in ("sound_from", "sound_to"):
+        hrs = [_hh(h) for h in range(24)]
+        rows = [hrs[i:i + 6] for i in range(0, 24, 6)] + [[BACK]]
+        txt = ("🌙 З котрої години без звуку?" if screen == "sound_from"
+               else f"🌙 Без звуку з {_hh(u.get('menu_from', 22))} до котрої години?")
+        return _kb(rows, "Оберіть годину"), txt
+    if screen == "users":
+        names = list(_user_buttons(users))
+        rows = [names[i:i + 2] for i in range(0, len(names), 2)] + [[BACK]]
+        return _kb(rows, "👥 Користувачі"), users_text(users) + ("\n\nОберіть людину, щоб змінити доступ." if names else "")
+    if screen.startswith("user:"):
+        t = users.get(screen[5:]) or {}
+        a = t.get("addr") or {}
+        st = {"approved": "✅ має доступ", "pending": "⏳ чекає підтвердження", "denied": "⛔ доступ закрито"}.get(t.get("status"), "?")
+        txt = (f"👤 {t.get('name', '?')}\n{st}" + (f" · {'👤 гість' if t.get('access') == 'guest' else '🏠 дім'}" if t.get("status") == "approved" else "")
+               + (f"\n📍 {a.get('label')}" if a.get("label") else ""))
+        return _kb([["🏠 Дім (усе)", "👤 Гість"], ["❌ Відкликати доступ"], [BACK]], "Доступ"), txt
+    return None, None
+
+
+MENU_PARENT = {"settings": None, "sound": "settings", "sound_from": "sound", "sound_to": "sound_from", "users": "settings",
+               "alerts": None, "acat": "alerts"}
+
+
+# --- «🚨 Тривоги» нижніми кнопками: список регіонів → регіон (🔔/🔕, 🗑) · ➕ → область → район → громада
+def _alert_btn(r):
+    return f"{'🔔' if r.get('on', True) else '🔕'} {r['name']}"
+
+
+def _cat_children(cfg, node):
+    """Кнопки екрана вибору: {текст: (id, є_діти)}; node None — області."""
+    cat = air_alerts.catalog(cfg)
+    if node is None:
+        items = sorted((r for r in cat.values() if r["parent"] is None),
+                       key=lambda r: (not r["name"].startswith("м. Київ"), _ua_key(r["name"])))
+    else:
+        items = [cat[k] for k in cat[node]["children"]]
+    return {r["name"]: (r["id"], bool(r["children"])) for r in items}
+
+
+def alerts_screen(store, u, cfg, screen):
+    regs = air_alerts.user_regions(u, cfg)
+    if screen == "alerts":
+        text = alerts_view(store, cfg, str(u.get("_uid", "")), u)[0]
+        rows = [[_alert_btn(r)] for r in regs]
+        if len(regs) < MAX_REGIONS:
+            rows.append([f"➕ Додати регіон ({len(regs)}/{MAX_REGIONS})"])
+        return _kb(rows + [[BACK]], "🚨 Тривоги"), text
+    if screen.startswith("areg:"):
+        i = int(screen[5:])
+        r = regs[i]
+        on = r.get("on", True)
+        text = f"{_alert_btn(r)}\nСповіщення про тривоги {'приходять' if on else 'вимкнені'}."
+        return _kb([["🔕 Вимкнути сповіщення" if on else "🔔 Увімкнути сповіщення"], ["🗑 Прибрати зі списку"], [BACK]],
+                   r["name"]), text
+    node = screen[5:] or None if screen.startswith("acat:") else None
+    kids = _cat_children(cfg, node)
+    names = list(kids)
+    if node is None:
+        rows = [names[i:i + 2] for i in range(0, len(names), 2)]
+        return _kb(rows + [[BACK]], "Область"), "➕ Оберіть область (або місто):"
+    r = air_alerts.catalog(cfg)[node]
+    whole = "✅ Уся область" if r["type"] == "State" else "✅ Увесь район"
+    rows = [[whole]] + [names[i:i + 2] for i in range(0, len(names), 2)]
+    hint = "район або громаду" if r["type"] == "State" else "громаду"
+    return _kb(rows + [[BACK]], r["name"]), f"➕ {r['name']}: додайте цілком або оберіть {hint}:"
+
+
+def _alerts_add(store, notifier, cfg, uid, users, rid, msg_id):
+    u = users[uid]
+    regs = [dict(r) for r in air_alerts.user_regions(u, cfg)]
+    e = air_alerts.region_entry(air_alerts.catalog(cfg), rid)
+    if any(r["name"] == e["name"] for r in regs):
+        note = f"Уже є: {e['name']}"
+    elif len(regs) >= MAX_REGIONS:
+        note = f"Уже {MAX_REGIONS} регіонів (максимум) — спершу приберіть один"
+    else:
+        regs.append(e)
+        u["air_regions"] = regs
+        note = f"➕ Додано: {e['name']}"
+    return _goto(store, notifier, cfg, uid, "alerts", msg_id, users, note)
+
+
+def handle_alerts_menu(store, cfg, notifier, users, uid, text, msg_id):
+    u = users[uid]
+    screen = u["menu"]
+    regs = [dict(r) for r in air_alerts.user_regions(u, cfg)]
+    if screen == "alerts":
+        for i, r in enumerate(regs):
+            if text == _alert_btn(r):
+                return _goto(store, notifier, cfg, uid, f"areg:{i}", msg_id, users)
+        if text.startswith("➕ Додати регіон"):
+            return _goto(store, notifier, cfg, uid, "acat", msg_id, users)
+        return None
+    if screen.startswith("areg:"):
+        i = int(screen[5:])
+        if i >= len(regs):
+            return _goto(store, notifier, cfg, uid, "alerts", msg_id, users)
+        if text in ("🔕 Вимкнути сповіщення", "🔔 Увімкнути сповіщення"):
+            regs[i]["on"] = text.startswith("🔔")
+            u["air_regions"] = regs
+            return _goto(store, notifier, cfg, uid, screen, msg_id, users)
+        if text == "🗑 Прибрати зі списку":
+            name = regs.pop(i)["name"]
+            u["air_regions"] = regs
+            return _goto(store, notifier, cfg, uid, "alerts", msg_id, users, f"🗑 Прибрано: {name}")
+        return None
+    node = screen[5:] or None if screen.startswith("acat:") else None
+    if node and text in ("✅ Уся область", "✅ Увесь район"):
+        return _alerts_add(store, notifier, cfg, uid, users, node, msg_id)
+    hit = _cat_children(cfg, node).get(text)
+    if not hit:
+        return None
+    rid, has_kids = hit
+    if has_kids:
+        return _goto(store, notifier, cfg, uid, f"acat:{rid}", msg_id, users)
+    return _alerts_add(store, notifier, cfg, uid, users, rid, msg_id)
+
+
+def _parent(screen, cfg):
+    """Екран, куди веде «Назад»; None — головне меню."""
+    if screen.startswith("user:"):
+        return "users"
+    if screen.startswith("areg:"):
+        return "alerts"
+    if screen.startswith("acat:"):
+        up = air_alerts.catalog(cfg).get(screen[5:], {}).get("parent")
+        return f"acat:{up}" if up else "acat"
+    return MENU_PARENT.get(screen)
+
+
+def _nav_row(kb, screen, cfg):
+    """Останній ряд [Назад] → «🏠 До головного меню» (якщо назад = головне) або [Назад, 🏠 До головного меню]."""
+    rows = kb["keyboard"]
+    if rows and [b["text"] for b in rows[-1]] == [BACK]:
+        try:
+            parent = _parent(screen, cfg)
+        except Exception:
+            parent = "?"
+        rows[-1] = [{"text": HOME}] if parent is None else [{"text": BACK}, {"text": HOME}]
+    return kb
+
+
+def _goto(store, notifier, cfg, uid, screen, msg_id=None, users=None, note=""):
+    users = users or get_users(store)
+    u = users[uid]
+    if screen is None:
+        u.pop("menu", None)
+        u.pop("menu_from", None)
+        save_users(store, users)
+        _swap_keyboard(store, notifier, uid, kb_for(u), "🏠 Головне меню", msg_id)
+        return "menu:main"
+    u["menu"] = screen
+    save_users(store, users)
+    try:
+        kb, txt = menu_screen(u, users, cfg, screen, store)
+    except Exception as e:  # напр. довідник регіонів недоступний — назад до списку тривог
+        print(f"menu {screen}: {type(e).__name__}: {e}")
+        if screen != "alerts":
+            return _goto(store, notifier, cfg, uid, "alerts", msg_id, users, "⚠️ Довідник регіонів зараз недоступний")
+        raise
+    _swap_keyboard(store, notifier, uid, _nav_row(kb, screen, cfg), (note + "\n\n" if note else "") + txt, msg_id)
+    return f"menu:{screen}"
+
+
+def handle_menu(store, cfg, notifier, users, uid, text, msg_id, web):
+    """Натиснута кнопка меню налаштувань → дія і новий екран. None — це не кнопка поточного екрана."""
+    u = users[uid]
+    screen = u.get("menu")
+    if not screen:
+        return None
+    if text == HOME:
+        return _goto(store, notifier, cfg, uid, None, msg_id, users)
+    if text == BACK:
+        return _goto(store, notifier, cfg, uid, _parent(screen, cfg), msg_id, users)
+    if screen == "alerts" or screen.startswith(("areg:", "acat")):
+        try:
+            return handle_alerts_menu(store, cfg, notifier, users, uid, text, msg_id)
+        except Exception as e:
+            print(f"alerts menu: {type(e).__name__}: {e}")
+            return _goto(store, notifier, cfg, uid, "alerts", msg_id, users, "⚠️ Довідник регіонів зараз недоступний")
+    if screen == "settings":
+        if text == "🔔 Звук":
+            return _goto(store, notifier, cfg, uid, "sound", msg_id, users)
+        if text == "👥 Користувачі" and u.get("role") == "owner":
+            return _goto(store, notifier, cfg, uid, "users", msg_id, users)
+        if text == "📍 Моя адреса":
+            u.pop("menu", None)
+            save_users(store, users)
+            if msg_id:
+                notifier.call("deleteMessage", {"chat_id": uid, "message_id": msg_id}, retries=0)
+            return address_start(store, notifier, users, uid)
+        return None
+    if screen == "sound":
+        op = _sound_buttons(u).get(text)
+        if not op:
+            return None
+        if op == "h":
+            return _goto(store, notifier, cfg, uid, "sound_from", msg_id, users)
+        st = sound_prefs(u)
+        for k in ("mute_schedule", "alarm_loud", "air_loud"):
+            st.pop(k, None)
+        if op == "on":
+            st["mute"] = False
+            st["night"]["on"] = False
+        elif op == "off":
+            st["mute"] = True
+        elif op == "non":
+            st["night"]["on"] = True
+        elif op == "noff":
+            st["night"]["on"] = False
+        u["sound"] = st
+        return _goto(store, notifier, cfg, uid, "sound", msg_id, users)
+    if screen in ("sound_from", "sound_to"):
+        hrs = {_hh(h): h for h in range(24)}
+        if text not in hrs:
+            return None
+        if screen == "sound_from":
+            u["menu_from"] = hrs[text]
+            return _goto(store, notifier, cfg, uid, "sound_to", msg_id, users)
+        a, b = int(u.get("menu_from", 22)), hrs[text]
+        if a == b:
+            return _goto(store, notifier, cfg, uid, "sound_to", msg_id, users)
+        st = sound_prefs(u)
+        st["night"].update(on=True, **{"from": a, "to": b})
+        u["sound"] = st
+        u.pop("menu_from", None)
+        return _goto(store, notifier, cfg, uid, "sound", msg_id, users)
+    if screen == "users" and u.get("role") == "owner":
+        tid = _user_buttons(users).get(text)
+        return _goto(store, notifier, cfg, uid, f"user:{tid}", msg_id, users) if tid else None
+    if screen.startswith("user:") and u.get("role") == "owner":
+        tid = screen[5:]
+        action = {"🏠 Дім (усе)": "approve", "👤 Гість": "guest", "❌ Відкликати доступ": "deny"}.get(text)
+        if not action or tid not in users:
+            return None
+        # та сама логіка, що й інлайн-кнопки доступу (вітання / відкликання для людини)
+        handle_callback({"id": "", "from": {"id": int(uid)}, "data": f"{action}:{tid}"}, store, notifier, web, cfg)
+        return _goto(store, notifier, cfg, uid, screen, msg_id)
+    return None
+
+
+
+def settings_view(u):
+    rows = [[{"text": "📍 Моя адреса", "callback_data": "set:address"}], [{"text": "🔔 Звук", "callback_data": "set:sound"}]]
+    if u.get("role") == "owner":
+        rows.append([{"text": "👥 Користувачі", "callback_data": "set:users"}])
+    return "⚙️ Налаштування", {"inline_keyboard": rows}
 ADDR_KEYBOARD = {"keyboard": [[{"text": "📍 Надіслати геолокацію", "request_location": True}], [{"text": "‹ Скасувати"}]],
                  "resize_keyboard": True, "one_time_keyboard": True, "input_field_placeholder": "Місто, вулиця, будинок"}
 
@@ -329,9 +680,7 @@ def _welcome(notifier, uid, u, web):
 
 def menu_commands(owner=False):
     cmds = [{"command": "start", "description": "⌨️ Показати кнопки"}]
-    cmds += [{"command": n, "description": d} for n, (d, _) in COMMANDS.items() if n != "help"]
-    if owner:
-        cmds.append({"command": "users", "description": "👥 Користувачі бота"})
+    cmds += [{"command": n, "description": d} for n, (d, _) in COMMANDS.items() if n not in MENU_HIDDEN]
     return cmds
 
 
@@ -374,8 +723,8 @@ def users_markup(users):
 MAX_REGIONS = 5
 
 
-def alerts_view(store, cfg, uid):
-    u = get_users(store).get(uid) or {}
+def alerts_view(store, cfg, uid, u=None):
+    u = u if u is not None else (get_users(store).get(uid) or {})
     regs = air_alerts.user_regions(u, cfg)
     state = store.get_meta("air_alerts") or {}
     now = int(time.time() * 1000)
@@ -393,7 +742,7 @@ def alerts_view(store, cfg, uid):
         lines.append(f"{'🔔' if r.get('on', True) else '🔕'} {r['name']}: {st}")
     if not regs:
         lines.append("Список порожній — додайте регіон кнопкою нижче.")
-    lines.append("\n🔔 — сповіщення приходять, 🔕 — вимкнені. Натисніть на регіон, щоб перемкнути; 🗑 — прибрати.")
+    lines.append("\n🔔 — сповіщення приходять, 🔕 — вимкнені. Кнопки внизу: регіон — увімкнути/вимкнути або прибрати; ➕ — додати.")
     rows = [[{"text": f"{'🔔' if r.get('on', True) else '🔕'} {r['name']}", "callback_data": f"ar:t:{i}"},
              {"text": "🗑", "callback_data": f"ar:d:{i}"}] for i, r in enumerate(regs)]
     if len(regs) < MAX_REGIONS:
@@ -533,7 +882,8 @@ def address_set(store, cfg, notifier, users, uid, msg):
     group = address.yasno_group(zone, g) if zone else None
     u.pop("awaiting", None)
     u["addr"] = {"label": g["label"], "state": g["state"], "district": g["district"], "municipality": g["municipality"],
-                 "zone": zone, "group": group, "group_src": "yasno" if group else None}
+                 "zone": zone, "group": group, "group_src": "yasno" if group else None,
+                 "lat": g.get("lat"), "lon": g.get("lon")}  # координати — для прогнозу погоди за адресою
     note = ""
     try:
         cat = air_alerts.catalog(cfg)
@@ -810,6 +1160,11 @@ def handle_callback(cb, store, notifier, web, cfg=None):
         return handle_sound_callback(cb, store, cfg or {}, notifier)
     if (cb.get("data") or "").startswith("dt:"):
         return handle_dtek_callback(cb, store, cfg or {}, notifier)
+    if (cb.get("data") or "").startswith("set:"):  # пункт «⚙️ Налаштування» = та сама команда, що й раніше кнопкою
+        notifier.call("answerCallbackQuery", {"callback_query_id": cb["id"]}, retries=0)
+        frm = cb.get("from") or {}
+        return handle_update({"message": {"chat": {"type": "private", "id": frm.get("id")}, "from": frm,
+                                          "text": "/" + cb["data"][4:]}}, store, cfg or {}, notifier, "", web)
     users = get_users(store)
     who = str((cb.get("from") or {}).get("id"))
     action, _, target = (cb.get("data") or "").partition(":")
@@ -876,6 +1231,13 @@ def handle_update(update, store, cfg, notifier, group_id, web=None):
         return "denied"
 
     kb = kb_for(u)
+    if u.get("menu") and text and not msg.get("location"):
+        r = handle_menu(store, cfg, notifier, users, uid, text, msg.get("message_id"), web)
+        if r:
+            return r
+        u.pop("menu", None)  # натиснули щось інше (напр. стару основну кнопку) — меню закрите
+        u.pop("menu_from", None)
+        save_users(store, users)
     cmd = BUTTON_CMD.get(text)
     if not cmd and text.startswith("/"):
         cmd = text.split()[0][1:].split("@")[0].lower()
@@ -901,35 +1263,33 @@ def handle_update(update, store, cfg, notifier, group_id, web=None):
         _welcome(notifier, uid, u, web)
         return cmd
     if cmd == "users" and u.get("role") == "owner":
-        _send(notifier, uid, users_text(users), **({"reply_markup": users_markup(users)} if users_markup(users) else {}))
-        return cmd
+        return _goto(store, notifier, cfg, uid, "users", msg.get("message_id"), users)
     if cmd == "dashboard":
         dashboard_reply(notifier, uid, dashboard_link(web, u.get("role")))
         return cmd
-    if cmd == "sound":
-        text, markup = sound_view(u, cfg)
-        _send(notifier, uid, text, reply_markup=markup)
+    if cmd == "settings":
+        return _goto(store, notifier, cfg, uid, "settings", msg.get("message_id"), users)
+    if cmd == "back":
+        _swap_keyboard(store, notifier, uid, kb, "🏠 Головне меню", msg.get("message_id"))
         return cmd
+    if cmd == "sound":
+        return _goto(store, notifier, cfg, uid, "sound", msg.get("message_id"), users)
     if cmd == "dtek":
         text, markup = dtek_view(store, cfg)
         _send(notifier, uid, text, **({"reply_markup": markup} if markup else {}))
         return cmd
     if cmd == "alerts":
-        text, markup = alerts_view(store, cfg, uid)
-        _send(notifier, uid, text, reply_markup=markup)
-        return cmd
+        return _goto(store, notifier, cfg, uid, "alerts", msg.get("message_id"), users)
     if cmd in COMMANDS and cmd != "help":
-        _send(notifier, uid, COMMANDS[cmd][1](_ctx(store, cfg, u)), reply_markup=kb)
+        _send(notifier, uid, COMMANDS[cmd][1]({**_ctx(store, cfg, u), "uid": uid}), reply_markup=kb)
         return cmd
     # довільний текст, стікер, фото тощо — мовчки стираємо (Telegram дозволяє боту видаляти вхідні в приваті),
     # щоб у чаті лишались тільки кнопки й відповіді
     if msg.get("message_id"):
         notifier.call("deleteMessage", {"chat_id": uid, "message_id": msg["message_id"]}, retries=0)
-    # людина пише текст — найчастіше тому, що кнопок не видно (очищено історію). Повертаємо клавіатуру
-    # службовим повідомленням і одразу стираємо його: клавіатура лишається, у чаті — нічого зайвого
-    ok, r = _send(notifier, uid, "⌨️", reply_markup=kb)
-    if ok and (r.get("result") or {}).get("message_id"):
-        notifier.call("deleteMessage", {"chat_id": uid, "message_id": r["result"]["message_id"]}, retries=0)
+    # людина пише текст — найчастіше тому, що кнопок не видно (очищено історію). Повертаємо кнопки
+    # службовим повідомленням (одне на людину, попереднє стирається — див. _swap_keyboard)
+    _swap_keyboard(store, notifier, uid, kb, "🏠 Головне меню")
     return "text (deleted, keyboard restored)"
 
 

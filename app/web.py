@@ -34,6 +34,28 @@ def user_for_key(keys, given):
 PAGES = {"/": "dashboard.html", "/index.html": "dashboard.html"}
 
 
+def visible_alerts(store, role):
+    """Тривоги для дашборда ролі (owner/member): лише регіони, які хтось із людей цієї ролі має увімкненими (🔔).
+    Перекреслений дзвіночок (🔕) у боті — регіон на дашборді не показується."""
+    import air_alerts
+
+    alerts = {k: v for k, v in (store.get_meta("air_alerts") or {}).items() if not k.startswith("_")}
+    on = visible_regions(store, role)
+    return alerts if on is None else {k: v for k, v in alerts.items() if k in on}
+
+
+def visible_regions(store, role):
+    """Регіони тривог, увімкнені (🔔) хоч в одного з людей цієї ролі; None — людей ще немає (показувати все)."""
+    import air_alerts
+
+    users = [u for u in (store.get_meta("tg_users") or {}).values()
+             if u.get("status") == "approved" and u.get("role", "member") == role and u.get("access") != "guest"]
+    if not users:
+        return None
+    cfg = load_config()
+    return {r["name"] for u in users for r in air_alerts.user_regions(u, cfg) if r.get("on", True)}
+
+
 def handle_telegram(store, cfg, headers, body):
     """Webhook Telegram-бота: приймаємо лише з правильним секретом (заголовок задає Telegram при setWebhook)."""
     import bot
@@ -70,6 +92,8 @@ def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
         states.sort(key=lambda s: (not s.get("gateway"), not s.get("mains"), s.get("name", "")))
         rules = store.get_meta("rules") or {}
         p = plan(cfg, states) if states else None
+        sched = schedule.for_web(store, cfg, int(time.time() * 1000))
+        alerts = visible_alerts(store, user)
         return _resp(200, {
             "now": int(time.time() * 1000),
             "devices": states,
@@ -79,8 +103,8 @@ def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
             "power": rules.get("power"),
             "last_internet_outage": rules.get("last_internet_outage"),
             "power_ids": [d["id"] for d in power_devices(states, cfg)],
-            "schedule": schedule.for_web(store, cfg, int(time.time() * 1000)),
-            "air_alerts": {k: v for k, v in (store.get_meta("air_alerts") or {}).items() if not k.startswith("_")},
+            "schedule": sched,
+            "air_alerts": alerts,
             "tuya_rooms": (store.get_meta("tuya_rooms") or {}).get("by_device", {}),
             "tuya_room_order": (store.get_meta("tuya_rooms") or {}).get("rooms", []),
             "last_poll": store.get_meta("last_poll"),
@@ -122,6 +146,24 @@ def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
         now = int(time.time() * 1000)
         return _resp(200, {"now": now, "weather": weather.for_web(store, cfg, now)})
 
+    if path in ("/api/game/me", "/api/game/score", "/api/game/checkers") and method == "POST":
+        import game
+        try:
+            data = json.loads(body or "{}")
+        except ValueError:
+            return _resp(400, {"error": "bad json"})
+        fn = {"score": game.save, "checkers": game.checkers_result}.get(path.rsplit("/", 1)[-1], game.me)
+        return _resp(200, fn(store, data))
+
+    if path == "/api/arank":
+        # рейтинг міст за тривогами за 365 днів (перераховується раз на добу)
+        return _resp(200, {"now": int(time.time() * 1000), "rank": store.get_meta("arank")})
+
+    if path == "/api/range":
+        import history
+        on = visible_regions(store, user)
+        return _resp(200, history.build(store, cfg, qs.get("from", ""), qs.get("to", ""), sorted(on) if on is not None else None))
+
     if path == "/api/history":
         try:
             hours = min(float(qs.get("h", 24)), MAX_HOURS)
@@ -150,16 +192,28 @@ def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
             n = min(int(qs.get("n", 100)), 500)
         except ValueError:
             n = 100
-        return _resp(200, {"events": store.get_events(limit=n)})
+        events = store.get_events(limit=n)
+        # тривоги з регіонів, де в боті 🔕, у журналі дашборда не показуємо (як і в шапці)
+        on = visible_regions(store, user)
+        if on is not None:
+            events = [e for e in events if not str(e.get("kind", "")).startswith("air_alert") or e.get("region") in on]
+        return _resp(200, {"events": events})
 
     return _resp(404, "Not found", "text/plain")
+
+
+_CACHE = {}
 
 
 def lambda_handler(event, context):
     from store import DynamoStore
 
-    cfg = load_config()
-    store = DynamoStore(os.environ["TABLE_NAME"])
+    # 19.11: підключення до DynamoDB і конфіг — один раз на «теплу» Lambda, а не на кожен запит
+    # (boto3.resource() коштував ~1 с процесора: дашборд відповідав 2 с, займаючи слоти ліміту 10 одночасних)
+    if "store" not in _CACHE:
+        _CACHE["store"] = DynamoStore(os.environ["TABLE_NAME"])
+        _CACHE["cfg"] = load_config()
+    cfg, store = _CACHE["cfg"], _CACHE["store"]
     method = ((event.get("requestContext") or {}).get("http") or {}).get("method", "GET")
     body = event.get("body") or ""
     if event.get("isBase64Encoded") and body:

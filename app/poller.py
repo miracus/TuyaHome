@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 import air_alerts
+import arank
 import schedule
 import weather
 from budget import device_rules, plan
@@ -134,6 +135,11 @@ def run(store, api, cfg, notifier, uid, now=None):
     summary["schedule"] = schedule.run(store, cfg, notifier, now)
     # --- повітряні тривоги (siren.pp.ua, квоту Tuya не витрачає)
     summary["air_alerts"] = air_alerts.run(store, cfg, notifier, now)
+    # --- рейтинг міст за тривогами: раз на добу дописує вчорашній день (без зберігання історії)
+    try:
+        summary["arank"] = arank.run(store, cfg, now)
+    except Exception as e:
+        summary["arank"] = f"{type(e).__name__}: {e}"
     # --- прогноз погоди (Open-Meteo, квоту Tuya не витрачає)
     try:
         summary["weather"] = weather.run(store, cfg, now)
@@ -212,6 +218,11 @@ def run(store, api, cfg, notifier, uid, now=None):
         _tuya_rooms(store, api, raw, cfg, now)
         devices = [normalize(d, specs[d["id"]], cfg) for d in raw]
 
+        try:  # чи зараз відключення за графіком — від цього залежить, як швидко оголошувати «немає світла»
+            meta["sched_expected_off"] = schedule.expected_off(store, cfg, now)
+        except Exception as e:
+            meta["sched_expected_off"] = None
+            print(f"[poller] expected_off: {type(e).__name__}: {e}")
         res = evaluate(prev, devices, meta, cfg, now)
         meta = res.meta
         for dev_id, code, value in res.history:
@@ -236,11 +247,31 @@ def run(store, api, cfg, notifier, uid, now=None):
                     print(f"[poller] next_off_text: {type(e).__name__}: {e}")
                 if nxt:
                     ev["text"] += "\n" + nxt
+            if ev.get("kind") == "outage_start":  # за графіком чи аварійне, і чи звертатись до ДТЕК
+                try:
+                    ctx = schedule.outage_context(store, cfg, ev.get("start") or now)
+                except Exception as e:
+                    ctx = None
+                    print(f"[poller] outage_context: {type(e).__name__}: {e}")
+                if ctx:
+                    ev["text"] += "\n" + ctx
             store.add_event(now, ev)
             if ev["notify"]:
                 # «розетка офлайн, але світло є» — службове, лише власнику (рішення 16.11)
                 to = _service_to(store) if ev.get("kind") in SERVICE_EVENTS else None
                 notifier.send(ev["text"], to=to, kind=ev.get("kind"))
+        # світла досі немає, хоча за графіком мало вже бути — одне нагадування з порадою звернутись до ДТЕК
+        out = meta.get("outage")
+        if out:
+            try:
+                late = schedule.outage_late(store, cfg, out["start"], now)
+                key = late and f"{out['start']}:{late[0]}"
+                if late and (store.get_meta("outage_late") or {}).get("key") != key:
+                    store.put_meta("outage_late", {"key": key, "ts": now})
+                    store.add_event(now, {"kind": "outage_late", "text": late[1], "notify": True})
+                    notifier.send(late[1], kind="outage_late")
+            except Exception as e:
+                print(f"[poller] outage_late: {type(e).__name__}: {e}")
         store.put_meta("last_poll", {"ts": now, "devices": len(devices)})
         summary.update(snapshot=True, events=len(res.events))
         prev = {s["id"]: s for s in res.states}

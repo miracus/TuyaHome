@@ -161,6 +161,27 @@ def power_devices(devices, cfg):
     return picked or [d for d in devices if d["mains"]]
 
 
+def _outage_confirmed(power, witnesses, states, meta, cfg, now):
+    """Чи вважати «усе від мережі офлайн» відключенням світла.
+    Звичайно — одразу. Але якщо розетка зникла задовго до свідків (її власний збій: вийняли, Zigbee), то про світло
+    свідчать лише свідки (датчик газу), а вони теж часом на 2–3 хв випадають з мережі (19.11 12:15–12:19 — хибне
+    «немає світла»). Тоді чекаємо, поки свідки офлайн щонайменше witness_confirm_min хвилин."""
+    # 19.11 12:15 і 12:25: розетка й датчик газу (обидва — Zigbee-роутери від мережі) кілька разів поспіль випадали
+    # з мережі разом, хоча світло було: так само виглядає збій радіо хаба. Тому:
+    #   за графіком зараз відключення — оголошуємо одразу;
+    #   поза графіком — лише коли всі прилади від мережі офлайн щонайменше outage_confirm_min хв (аварійні — довгі,
+    #   а збої зв'язку — 2–4 хв); графіка немає — outage_confirm_nosched_min.
+    gone = max(states[d["id"]].get("offline_since") or now for d in power + witnesses)
+    exp = meta.get("sched_expected_off")
+    wait = 0 if exp else cfg.get("outage_confirm_min", 8) if exp is False else cfg.get("outage_confirm_nosched_min", 5)
+    if witnesses:  # розетка зникла задовго до свідків (її власний збій) — свідки самі, теж чекаємо
+        w_gone = max(states[d["id"]].get("offline_since") or now for d in witnesses)
+        p_gone = min(states[d["id"]].get("offline_since") or now for d in power) if power else now
+        if meta.get("power_source_down") or w_gone - p_gone > 10 * 60_000:
+            wait = max(wait, cfg.get("witness_confirm_min", 6))
+    return now - gone >= wait * 60_000
+
+
 def _power_and_internet(res, devices, meta, cfg, now):
     """Інтернет = хаб онлайн (хаб на зарядній станції). Світло = розетка онлайн, але лише поки хаб на зв'язку:
     розетка — Zigbee через хаб, тож без хаба її стан невідомий.
@@ -222,7 +243,7 @@ def _power_and_internet(res, devices, meta, cfg, now):
         res.event("outage_cancel", f"✅ Світло є: «немає світла з {fmt_time(outage['start'], cfg)}» — хибне, "
                   f"офлайн лише розетка, а «{', '.join(d['name'] for d in alive)}» весь час на зв'язку", notify=True)
         outage = None
-    elif not outage and all(not d["online"] for d in watch):
+    elif not outage and all(not d["online"] for d in watch) and _outage_confirmed(power, witnesses, states, meta, cfg, now):
         start = max(states[d["id"]].get("offline_since") or now for d in watch)
         meta["outage"] = {"start": start}
         res.event("outage_start", f"🔌 Немає світла з {fmt_time(start, cfg)}", notify=True, start=start)

@@ -84,6 +84,17 @@ class LocalStore:
         arch = self.data.get("ARCH", {})
         return [arch[k] for k in sorted(arch) if k.startswith(f"{kind}#") and k[len(kind) + 1:] >= key_from]
 
+    # --- діапазони «від–до» для вкладки «Історія»
+    def get_history_range(self, dev_id, code, from_ms, to_ms):
+        return [tuple(p) for p in self.data["H"].get(f"{dev_id}#{code}", []) if from_ms <= p[0] < to_ms]
+
+    def get_events_range(self, from_ms, to_ms):
+        return sorted((e for e in self.data["EVENT"] if from_ms <= e["ts"] < to_ms), key=lambda e: e["ts"])
+
+    def list_archive_range(self, kind, key_from, key_to):
+        arch = self.data.get("ARCH", {})
+        return [arch[k] for k in sorted(arch) if k.startswith(f"{kind}#") and key_from <= k[len(kind) + 1:] < key_to]
+
 
 class DynamoStore:
     def __init__(self, table_name, history_ttl_days=180, events_ttl_days=730):
@@ -164,3 +175,25 @@ class DynamoStore:
 
     def list_archive(self, kind, key_from=""):
         return [json.loads(i["doc"]) for i in self._query(f"ARCH#{kind}", str(key_from) if key_from else None)]
+
+    # --- діапазони «від–до» для вкладки «Історія» (sk між from і to, без верхньої межі включно)
+    def _between(self, pk, sk_from, sk_to):
+        from boto3.dynamodb.conditions import Key
+
+        kwargs = {"KeyConditionExpression": Key("pk").eq(pk) & Key("sk").between(sk_from, sk_to)}
+        items = []
+        while True:
+            r = self.table.query(**kwargs)
+            items += [i for i in r["Items"] if i["sk"] < sk_to]
+            if "LastEvaluatedKey" not in r:
+                return items
+            kwargs["ExclusiveStartKey"] = r["LastEvaluatedKey"]
+
+    def get_history_range(self, dev_id, code, from_ms, to_ms):
+        return [(int(i["sk"]), json.loads(i["doc"])) for i in self._between(f"H#{dev_id}#{code}", ts13(from_ms), ts13(to_ms))]
+
+    def get_events_range(self, from_ms, to_ms):
+        return [json.loads(i["doc"]) for i in self._between("EVENT", ts13(from_ms), ts13(to_ms))]
+
+    def list_archive_range(self, kind, key_from, key_to):
+        return [json.loads(i["doc"]) for i in self._between(f"ARCH#{kind}", str(key_from), str(key_to))]

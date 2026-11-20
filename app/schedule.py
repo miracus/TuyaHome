@@ -230,6 +230,84 @@ def next_off_text(store, cfg, now):
     return f"📅 Наступне відключення за графіком: {day_label(day, meta.get('today'), cfg)} {fmt_time(a, cfg)}–{end}"
 
 
+EARLY = 15 * MIN   # світло часто вимикають на кілька хвилин раніше/пізніше за графік
+LATE_AFTER = 30 * MIN  # стільки чекаємо після кінця відключення за графіком, перш ніж радити ДТЕК
+
+
+def _home_ivs(store, cfg, now):
+    """Інтервали графіка дому навколо now: [(a, b, "off"|"maybe")]; None — графіка немає."""
+    sc = cfg.get("outage_schedule")
+    days = ((store.get_meta("schedule") or {}).get("days") or {}) if sc else {}
+    days = {d: h for d, h in days.items() if int(d) * 1000 + 2 * 86_400_000 > now}
+    if not days:
+        return None
+    return sorted([(a, b, "off") for d, h in days.items() for a, b in intervals(d, h)] +
+                  [(a, b, "maybe") for d, h in days.items() for a, b in intervals(d, h, "maybe")])
+
+
+def _hh(ms, cfg):
+    return "24:00" if fmt_time(ms, cfg) == "00:00" else fmt_time(ms, cfg)
+
+
+def dtek_hint(cfg):
+    bot = (cfg.get("dtek_report") or {}).get("bot")
+    return f"повідомте ДТЕК: t.me/{bot}" if bot else "повідомте ДТЕК"
+
+
+def expected_off(store, cfg, now):
+    """Чи зараз відключення за графіком (з допуском EARLY на ранній початок): True / False / None (графіка немає)."""
+    ivs = _home_ivs(store, cfg, now)
+    if ivs is None:
+        return None
+    return any(a - EARLY <= now < b for a, b, _ in ivs)
+
+
+def outage_context(store, cfg, start):
+    """Для «🔌 Немає світла»: чи це за графіком і чи треба звертатись до ДТЕК. Графіка немає — None."""
+    ivs = _home_ivs(store, cfg, start)
+    if ivs is None:
+        return None
+    hit = next(((a, b, k) for a, b, k in ivs if a - EARLY <= start < b), None)
+    if hit and hit[2] == "off":
+        a, b, _ = hit
+        # 19.11: про ДТЕК пишемо лише тоді, коли справді треба звертатись (аварійне / не повернули вчасно)
+        return f"📅 За графіком: відключення {fmt_time(a, cfg)}–{_hh(b, cfg)}, світло мають повернути о {_hh(b, cfg)}."
+    if hit:
+        a, b, _ = hit
+        return (f"🟡 За графіком {fmt_time(a, cfg)}–{_hh(b, cfg)} — можливе відключення, ймовірно, це воно. "
+                f"Якщо світла не буде після {_hh(b, cfg)} — бот нагадає.")
+    nxt = next(((a, b) for a, b, k in ivs if k == "off" and a > start), None)
+    if nxt:
+        same = fmt_time(nxt[0], cfg, with_date=True)[:5] == fmt_time(start, cfg, with_date=True)[:5]
+        when = "сьогодні" if same else fmt_time(nxt[0], cfg, with_date=True)[:5]
+        plan = f"наступне за графіком — {when} {fmt_time(nxt[0], cfg)}–{_hh(nxt[1], cfg)}"
+    else:
+        plan = "до кінця відомого графіка відключень немає"
+    return (f"⚠️ За графіком світло зараз має бути ({plan}) — схоже на аварійне відключення.\n"
+            f"Перевірте світло в під'їзді / у сусідів: якщо там теж немає — {dtek_hint(cfg)}")
+
+
+def outage_late(store, cfg, start, now):
+    """Світла досі немає через LATE_AFTER після кінця відключення за графіком → текст нагадування (або None).
+    Повертає (ключ інтервалу, текст), щоб нагадати один раз."""
+    ivs = _home_ivs(store, cfg, start)
+    if not ivs:
+        return None
+    hit = next(((a, b, k) for a, b, k in ivs if a - EARLY <= start < b), None)
+    if not hit:
+        return None  # аварійне — про ДТЕК уже сказали на початку
+    # кілька відключень поспіль (12:00–16:00, 16:00–20:00) — кінець = кінець останнього, що йде впритул
+    end = hit[1]
+    for a, b, k in ivs:
+        if a <= end < b or a == end:
+            end = max(end, b)
+    if now < end + LATE_AFTER:
+        return None
+    return str(end), (f"⏰ За графіком світло мало бути з {_hh(end, cfg)}, а його досі немає "
+                      f"(вимкнули о {fmt_time(start, cfg)}).\n"
+                      f"Можливо, аварія — {dtek_hint(cfg)}")
+
+
 def for_web(store, cfg, now, zone=None, group=None):
     """Графік на сьогодні й завтра: дому (за замовчуванням) або зони/черги з адреси користувача бота."""
     sc = cfg.get("outage_schedule")

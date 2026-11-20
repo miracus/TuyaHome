@@ -48,6 +48,137 @@ header .title{display:flex;align-items:center;gap:12px;margin-right:auto;flex-wr
 .next{font-weight:600}
 /* погода: прогноз vs датчик «Назовні» — та сама сітка доби, що й графік ДТЕК */
 #weather{margin-bottom:12px}
+.toptabs{margin:0 0 8px}.toptabs .seg button{padding:6px 16px;font-size:14px}
+body[data-top="power"] #weather,body[data-top="weather"] #sched,body:not([data-top="history"]) #hist,
+body[data-top="history"] #sched,body[data-top="history"] #weather{display:none}
+#hist{margin-bottom:12px}
+#loader{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--bg);z-index:50}
+body.loading #loader{display:flex}body.loading main{visibility:hidden}
+#loader b{font-size:20px}#loader span{color:var(--muted);font-size:14px;text-align:center;padding:0 16px}
+.spin{width:46px;height:46px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--accent);animation:spin .9s linear infinite}
+#loader.err .spin{animation:none;border-top-color:var(--bad)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+/* у вкладках, поки вантажиться історія, — той самий кружечок, менший */
+.hload{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;padding:14px 0}
+.hload .spin{width:22px;height:22px;border-width:3px}
+body[data-top="history"] #hist ~ *{display:none}
+body:not([data-top="game"]) #game{display:none}
+body[data-top="game"] #sched,body[data-top="game"] #weather,body[data-top="game"] #game ~ *{display:none}
+/* гра «Пляшечки» */
+#game{margin-bottom:12px}
+.gbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 10px}
+.gbar>div{padding:6px 10px;border:1px solid var(--line);border-radius:12px}
+.gbar small{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.gbar b{display:block;font-size:20px}.gbar span{display:block;font-size:11px;color:var(--muted)}
+.gtubes{position:relative;padding:0 0 4px}.gtubes canvas{display:block;width:100%;touch-action:manipulation;cursor:pointer}
+/* пляшечка: кнопка-обгортка (корок, рух) + скло (рідина обрізається по склу) */
+.tube{position:relative;width:46px;height:166px;padding:0;border:0;background:none;cursor:pointer;transition:transform .15s;flex:none}
+/* корпус: «плечі» зверху й кругле дно; рідина впритул до скла (форму дає overflow:hidden) */
+.tube .glass{position:absolute;left:0;right:0;bottom:0;top:32px;border:2px solid var(--muted);border-radius:15px 15px 22px 22px;padding:0;
+  display:flex;flex-direction:column-reverse;overflow:hidden;
+  background:linear-gradient(90deg,rgba(255,255,255,.06),rgba(255,255,255,.18) 30%,rgba(255,255,255,0) 60%)}
+.tube .glass i{display:block;height:var(--lh,32px);flex:none;margin:0;
+  background-image:linear-gradient(90deg,rgba(0,0,0,.10),rgba(255,255,255,.28) 28%,rgba(255,255,255,0) 55%,rgba(0,0,0,.12))}
+.tube .glass i:last-child{box-shadow:inset 0 3px 0 rgba(255,255,255,.35)}   /* поверхня рідини */
+/* горлечко з ободком; фон картки закриває верх корпусу посередині — виходить отвір у горлечко */
+.tube .neck{position:absolute;left:50%;top:5px;width:20px;margin-left:-10px;height:30px;border:2px solid var(--muted);border-top:0;border-bottom:0;
+  background:var(--card);z-index:1}
+.tube .neck::before{content:"";position:absolute;left:-6px;right:-6px;top:-5px;height:5px;border:2px solid var(--muted);border-radius:3px;background:var(--card)}
+.tube.sel .neck,.tube.sel .neck::before{border-color:var(--accent)}
+.tube .neck.flow-r{background:linear-gradient(90deg,var(--card) 58%,var(--flow) 58%)}
+.tube .neck.flow-l{background:linear-gradient(90deg,var(--flow) 42%,var(--card) 42%)}
+.tube .neck.flow{animation:neckFlow .5s linear infinite}
+@keyframes neckFlow{from{filter:brightness(1)}50%{filter:brightness(1.12)}to{filter:brightness(1)}}
+.tube.done .neck,.tube.done .neck::before{border-color:var(--ok)}
+.tube.sel{transform:translateY(-14px)}
+.tube.sel .glass{border-color:var(--accent);box-shadow:0 6px 14px rgba(37,99,235,.25)}
+.tube.done .glass{border-color:var(--ok)}
+/* корок: з'являється, коли пляшечка заповнена одним кольором */
+.cork{position:absolute;left:50%;top:-6px;width:22px;height:20px;margin-left:-11px;border-radius:5px 5px 3px 3px;z-index:2;
+  background:linear-gradient(180deg,#c8946a,#9a6a43 70%,#7b5233);box-shadow:inset 0 2px 0 rgba(255,255,255,.25),0 1px 2px rgba(0,0,0,.25)}
+.cork.new{animation:corkIn .55s cubic-bezier(.3,1.6,.5,1) both}
+@keyframes corkIn{0%{transform:translateY(-34px) rotate(-12deg);opacity:0}60%{opacity:1}100%{transform:none;opacity:1}}
+/* струмінь під час переливання */
+.stream{position:absolute;width:6px;border-radius:3px;z-index:4;pointer-events:none;
+  background-image:linear-gradient(90deg,rgba(255,255,255,.35),rgba(255,255,255,0) 60%)}
+@media (prefers-reduced-motion:reduce){.cork.new{animation:none}}
+.gctl{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:8px 0}
+.gctl button,.gwin button{font:inherit;font-size:14px;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.gctl button:disabled{opacity:.45;cursor:default}
+.gwin{background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:10px 12px;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.gwin button{background:var(--ok);color:#fff;border-color:transparent}
+.gtop-h{font-size:13px;margin:14px 0 6px}
+.privacy .pv{filter:blur(6px);user-select:none}
+.gtop{margin:0;padding:0;list-style:none}
+.gtop li{display:flex;gap:6px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:14px}
+.gtop li span:last-child{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
+.gtop li.me{font-weight:700;color:var(--accent)}
+.gsub{margin:0 0 10px}.gsub .seg button{padding:6px 14px;font-size:14px}
+.gnext{margin:0 0 8px}
+.gboss{background:linear-gradient(90deg,#3b0764,#7c2d12);color:#fde68a;border-radius:12px;padding:9px 12px;font-weight:700;margin:0 0 10px;
+  animation:bossGlow 2.4s ease-in-out infinite alternate}
+@keyframes bossGlow{from{box-shadow:0 0 0 rgba(251,191,36,0)}to{box-shadow:0 0 18px rgba(251,191,36,.45)}}
+.gtubes.boss{background:radial-gradient(ellipse at center,rgba(124,58,237,.16),transparent 70%);border-radius:16px}
+.tube .glass i.hid{background:repeating-linear-gradient(45deg,#6b7280 0 6px,#4b5563 6px 12px);position:relative}
+.tube .glass i.hid::after{content:"?";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e5e7eb;font-weight:800;font-size:15px}
+/* ⛀ шашки */
+.cs-ctl{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+.cs-msg{font-weight:700;padding:6px 10px;border-radius:10px;margin:0 0 6px;background:var(--grid)}
+.cs-msg.check{background:var(--warn-bg);color:var(--warn)}.cs-msg.win{background:var(--ok-bg);color:var(--ok)}
+.cs-msg.loss{background:var(--bad-bg);color:var(--bad)}.cs-msg.draw{background:var(--grid)}
+.cs-board{position:relative;width:min(100%,440px);aspect-ratio:1;margin:0 auto;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
+  border-radius:8px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.18);user-select:none;border:6px solid #5b3a1e}
+.csq{position:relative;cursor:pointer}.csq.lt{background:#f0d9b5}.csq.dk{background:#8b5a2b}
+.csq.lastm.dk{background:#a87a3c}
+.csq.seld{box-shadow:inset 0 0 0 4px rgba(250,204,21,.9)}
+.csq.must{box-shadow:inset 0 0 0 3px rgba(239,68,68,.85);animation:chkPulse .9s ease-in-out infinite alternate}
+@keyframes chkPulse{from{filter:brightness(1)}to{filter:brightness(1.3)}}
+.csq.dot::after{content:"";position:absolute;left:50%;top:50%;width:30%;height:30%;margin:-15% 0 0 -15%;border-radius:50%;background:rgba(250,204,21,.65)}
+.csq em{position:absolute;font-style:normal;font-size:10px;font-weight:700;opacity:.6;pointer-events:none}
+.csq em.rk{left:3px;top:2px}.csq em.fl{right:4px;bottom:1px}
+.csq.lt em{color:#8b5a2b}.csq.dk em{color:#f0d9b5}
+.cs-pieces{position:absolute;inset:0;pointer-events:none}
+.pc{position:absolute;left:0;top:0;width:12.5%;height:12.5%;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;transition:transform .28s cubic-bezier(.3,.1,.3,1)}
+.pc i{width:78%;height:78%;border-radius:50%;position:relative;transition:transform .13s}
+.pc.w i{background:radial-gradient(circle at 35% 30%,#fff,#e7e2d6 55%,#b9b2a2);box-shadow:0 3px 0 #9c9484,0 4px 6px rgba(0,0,0,.35)}
+.pc.b i{background:radial-gradient(circle at 35% 30%,#6b6b6b,#2b2b2b 55%,#111);box-shadow:0 3px 0 #000,0 4px 6px rgba(0,0,0,.45)}
+.pc i::before{content:"";position:absolute;inset:16%;border-radius:50%;border:2px solid rgba(0,0,0,.14)}
+.pc.b i::before{border-color:rgba(255,255,255,.12)}
+.pc.king i::after{content:"👑";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:min(4.5vw,22px)}
+.pc.moving{z-index:3}
+.pc.hop i{transform:scale(1.18) translateY(-6%)}
+.pc.taken{opacity:0;scale:.3;transition:opacity .25s,scale .25s}
+.pc.promoted i{animation:promo .6s ease-out}
+@keyframes promo{0%{transform:scale(.6);filter:brightness(2.2)}60%{transform:scale(1.3)}100%{transform:scale(1)}}
+.cs-caps{font-size:13px;color:var(--muted);margin:4px auto;width:min(100%,440px)}
+@media (prefers-reduced-motion:reduce){.pc{transition:none}.gboss,.csq.chk{animation:none}}  /* в історії — лише історія, без показників, подій і квоти */
+.hctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
+.hctl input,.hctl select{font:inherit;font-size:13px;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.hsum{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:0 0 10px}
+.hsum>div{padding:8px 12px;border:1px solid var(--line);border-radius:12px}
+.hsum small{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.hsum b{display:block;font-size:18px}.hsum span{display:block;font-size:12px;color:var(--muted)}
+.hchart{position:relative;height:160px;border-radius:6px;background:var(--grid);overflow:hidden}
+.hchart.small-h{height:40px;margin-top:4px}
+.hchart svg{position:absolute;inset:0;width:100%;height:100%}
+.hchart .rng{position:absolute;left:4px;top:2px;font-size:10px;color:var(--muted)}.hchart .rng.b{top:auto;bottom:2px}
+.abar{height:18px}.abar b.calm{background:var(--ok-bg)}.abar b.red{background:var(--bad)}.abar b.yel{background:var(--maybe)}
+.abar span{position:absolute;left:6px;top:1px;font-size:10px;color:var(--ink);opacity:.75;pointer-events:none;text-shadow:0 0 3px var(--card)}
+.rank{display:flex;flex-direction:column;gap:2px}
+#hist.rankview .hctl{display:none}
+.rrow{display:grid;grid-template-columns:30px minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.2fr);gap:10px;align-items:center;padding:6px 4px;border-top:1px solid var(--line)}
+.rrow:first-child{border-top:0}
+.rrow.now{background:var(--bad-bg)}
+.rpos{font-size:16px;text-align:center;color:var(--muted)}
+.rrow:nth-child(1) .rpos{color:#d4a017}.rrow:nth-child(2) .rpos{color:#9ca3af}.rrow:nth-child(3) .rpos{color:#b45309}
+.rname{font-weight:600}.rname span{display:block;font-weight:400;font-size:12px;color:var(--muted)}.rname em{font-style:normal;color:var(--bad)}
+.rbar{height:10px;border-radius:5px;background:var(--grid);overflow:hidden}.rbar i{display:block;height:100%;background:linear-gradient(90deg,var(--maybe),var(--bad))}
+.rnum b{display:block}.rnum span{font-size:12px;color:var(--muted)}
+@media (max-width:600px){.rrow{grid-template-columns:24px minmax(0,1fr) minmax(0,1fr)}.rbar{display:none}}
+.haxis{position:relative;height:16px;font-size:11px;color:var(--muted);margin-top:2px}
+.haxis span{position:absolute;transform:translateX(-50%);white-space:nowrap}
 .sky{display:grid;grid-template-columns:repeat(8,1fr);gap:1px;height:30px;border-radius:6px;overflow:hidden;position:relative}
 .sky i{display:flex;align-items:center;justify-content:center;gap:3px;font-style:normal;font-size:12px;background:var(--grid)}
 .sky i.clear{background:#fef3c7}.sky i.cloud{background:#e5e7eb}.sky i.rain{background:#bfdbfe}.sky i.snow{background:#e0f2fe}.sky i.storm{background:#c7d2fe}
@@ -113,6 +244,7 @@ header .title{display:flex;align-items:center;gap:12px;margin-right:auto;flex-wr
 .chart.open .ch-head .chev{transform:rotate(90deg)}
 .chart .body{display:none;margin-top:6px}.chart.open .body{display:block}
 .charts .chart{padding:10px 14px}
+.chart.offline{background:var(--grid);border-color:transparent}.chart.offline .val{color:var(--muted)}.chart.offline svg{opacity:.55}
 .ch-head .name{font-weight:600;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ch-head .val{margin-left:auto;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ch-head .val small{font-size:13px;color:var(--muted);font-weight:600;margin-left:2px}
@@ -169,6 +301,7 @@ ul.list li{padding:6px 0;border-top:1px solid var(--line);display:flex;gap:10px}
 ul.list li:first-child{border-top:0}
 ul.list .t{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px;min-width:86px}
 ul.list li.dim{color:var(--muted)}
+#outages .t{min-width:0}  /* тут зліва лише дата (час — у рядку «з … до …») */
 .kind{font-size:11px;border-radius:6px;padding:0 6px;margin-right:6px;white-space:nowrap}
 .kind.power{background:var(--warn-bg);color:var(--warn)}.kind.net{background:var(--grid);color:var(--muted)}
 .bar{height:8px;background:var(--grid);border-radius:4px;overflow:hidden;margin:6px 0}
@@ -187,7 +320,9 @@ ul.list li.dim{color:var(--muted)}
 }
 </style>
 </head>
-<body>
+<body class="loading">
+<!-- екран завантаження: поки не прийшли перші дані, порожній дашборд не показуємо -->
+<div id="loader" role="status" aria-live="polite"><div class="spin"></div><b>Дім</b><span id="loader-msg">Завантаження даних…</span></div>
 <main>
   <header>
     <div class="title"><h1>Дім</h1>
@@ -200,8 +335,12 @@ ul.list li.dim{color:var(--muted)}
   </header>
   <div id="err" class="err"></div>
 
+  <!-- над графіками: перемикач «Світло» (графік ДТЕК + факт) / «Погода» (прогноз + датчик); за замовчуванням — світло -->
+  <div class="toptabs"><span class="seg" id="toptabs"><button data-t="power" class="on">💡 Світло</button><button data-t="weather">🌤 Погода</button><button data-t="history">📜 Історія</button><button data-t="game">🎮 Гра</button></span></div>
   <section class="card" id="sched" hidden></section>
   <section class="card" id="weather" hidden></section>
+  <section class="card" id="hist"></section>
+  <section class="card" id="game"></section>
 
   <!-- два види: «Показники» (аналогові, за замовчуванням) і «Датчики і прилади» (дискретні);
        перемикач — вертикальна стрілка на всю висоту: справа на показниках, зліва на датчиках -->
@@ -227,6 +366,13 @@ ul.list li.dim{color:var(--muted)}
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
 <script>
 const K = new URLSearchParams(location.search).get("k") || "";
+const QS = new URLSearchParams(location.search);
+// ?privacy=1 — для знімків екрана: адреса, місто, район, черга, імена — розмиті (клас pv)
+if (QS.get("privacy") === "1") document.documentElement.classList.add("privacy");
+const PV = s => `<span class="pv">${s}</span>`;
+// у текстах подій: назви регіонів і міст («… район», «… область», «м. …», «… громада», черга) — розмити
+const PVTEXT = s => !document.documentElement.classList.contains("privacy") ? s :
+  s.replace(/(м\. [А-ЯІЇЄҐ][^\s,.)]+|[А-ЯІЇЄҐ][а-яіїєґ'’-]+(?:ий|а|е)? (?:район|область|громада)|черга [\d.]+)/g, m => PV(m));
 const api = (p, q = {}) => fetch(`${p}?${new URLSearchParams({k: K, ...q})}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
 
 const LABEL = {cur_voltage:"Напруга",cur_power:"Потужність",cur_current:"Струм",add_ele:"Спожито",
@@ -289,11 +435,11 @@ function renderHeader() {
 function renderAlerts() {
   const A = S.air_alerts || {};
   document.getElementById("st-alerts").innerHTML = Object.entries(A).map(([name, a]) => {
-    const short = name.replace("Бориспільський район", "Бориспільський р-н");
+    const short = name.replace(/ район$/, " р-н");
     const yel = a.level === "yellow";
     return a.active
-      ? `<div class="st ${yel ? "warn" : "bad"}"><span class="ico">${yel ? "🟡" : "🚨"}</span><div><b>${yel ? "Жовта тривога" : "Тривога"} · ${esc(short)}</b><span>${yel ? "жовтий" : "червоний"} рівень · ${dur(S.now - a.since)} · з ${fmtT(a.since)}</span></div></div>`
-      : `<div class="st ok"><span class="ico">🕊️</span><div><b>Тихо · ${esc(short)}</b><span>${a.last ? `відбій о ${fmtT(a.last.end)}` : "без тривоги"}</span></div></div>`;
+      ? `<div class="st ${yel ? "warn" : "bad"}"><span class="ico">${yel ? "🟡" : "🚨"}</span><div><b>${yel ? "Жовта тривога" : "Тривога"} · ${PV(esc(short))}</b><span>${yel ? "жовтий" : "червоний"} рівень · ${dur(S.now - a.since)} · з ${fmtT(a.since)}</span></div></div>`
+      : `<div class="st ok"><span class="ico">🕊️</span><div><b>Тихо · ${PV(esc(short))}</b><span>${a.last ? `відбій о ${fmtT(a.last.end)}` : "без тривоги"}</span></div></div>`;
   }).join("");
 }
 
@@ -421,11 +567,1022 @@ async function renderWeather() {
         <span class="small muted">${p ? `${p.toFixed(1)} мм · ${pp}%` : pp ? `опади ${pp}%` : "без опадів"}</span>
         <span class="small muted">вітер до ${Math.round(r[D.wind_speed_10m_max])} м/с</span></div>`; }).join("")}</div>`;
   }
-  el.innerHTML = `<div class="sec-head"><h2>Погода · ${esc(W.place || "")}</h2>
+  el.innerHTML = `<div class="sec-head"><h2>Погода · ${PV(esc(W.place || ""))}</h2>
       <span class="seg" id="wtabs">${[["today","Сьогодні"],["tomorrow","Завтра"],["week","Тиждень"]].map(([k, t]) =>
         `<button data-w="${k}" class="${k === wTab ? "on" : ""}">${t}</button>`).join("")}</span>
       <span class="small muted">прогноз Open-Meteo · оновлено ${W.fetched ? fmtT(W.fetched) : "—"}</span></div>${body}`;
   el.querySelectorAll("#wtabs button").forEach(b => b.onclick = () => { wTab = b.dataset.w; renderWeather(); });
+}
+
+// ---- вкладка «Історія»: період (день / місяць / рік / свій) × що показувати (світло / погода)
+const HIST = {period: "day", kind: "power", data: null, key: ""};
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const hfmt = h => { const m = Math.round(h * 60); return m >= 60 ? `${Math.floor(m / 60)} год${m % 60 ? ` ${m % 60} хв` : ""}` : `${m} хв`; };
+
+function histRange() {
+  const q = id => document.getElementById(id).value;
+  const t = new Date();
+  if (HIST.period === "day") { const d = q("h-day") || iso(t); return [d, d]; }
+  if (HIST.period === "month") {
+    const [y, m] = (q("h-month") || iso(t).slice(0, 7)).split("-").map(Number);
+    return [`${y}-${String(m).padStart(2, "0")}-01`, iso(new Date(y, m, 0))];
+  }
+  if (HIST.period === "year") { const y = q("h-year") || t.getFullYear(); return [`${y}-01-01`, `${y}-12-31`]; }
+  return [q("h-from") || iso(t), q("h-to") || iso(t)];
+}
+
+function histControls() {
+  const t = new Date(), y0 = 2026;
+  const years = Array.from({length: t.getFullYear() - y0 + 1}, (_, i) => t.getFullYear() - i);
+  const inputs = {
+    day: `<input type="date" id="h-day" value="${iso(t)}" max="${iso(t)}">`,
+    month: `<input type="month" id="h-month" value="${iso(t).slice(0, 7)}" max="${iso(t).slice(0, 7)}">`,
+    year: `<select id="h-year">${years.map(y => `<option>${y}</option>`).join("")}</select>`,
+    custom: `<input type="date" id="h-from" value="${iso(new Date(t - 6 * 864e5))}" max="${iso(t)}"> — <input type="date" id="h-to" value="${iso(t)}" max="${iso(t)}">`,
+  };
+  return `<div class="sec-head"><h2>Історія</h2><span id="h-extra"></span>
+    <span class="seg" id="h-kind">${[["power", "💡 Світло"], ["weather", "🌤 Погода"], ["alerts", "🚨 Тривоги"]].map(([k, l]) => `<button data-k="${k}" class="${k === HIST.kind ? "on" : ""}">${l}</button>`).join("")}</span></div>
+    <div class="hctl"><span class="seg" id="h-period">${[["day", "День"], ["month", "Місяць"], ["year", "Рік"], ["custom", "Свій"]].map(([k, l]) =>
+      `<button data-p="${k}" class="${k === HIST.period ? "on" : ""}">${l}</button>`).join("")}</span>
+    ${Object.entries(inputs).map(([k, h]) => `<span class="hin" data-p="${k}" ${k === HIST.period ? "" : "hidden"}>${h}</span>`).join("")}</div>
+    <div id="h-body"><div class="hload"><div class="spin"></div>Завантаження…</div></div>`;
+}
+
+function initHistory() {
+  const el = document.getElementById("hist");
+  if (el.dataset.ready) return;
+  el.dataset.ready = "1";
+  el.innerHTML = histControls();
+  el.querySelectorAll("#h-period button").forEach(b => b.onclick = () => {
+    HIST.period = b.dataset.p;
+    el.querySelectorAll("#h-period button").forEach(x => x.classList.toggle("on", x === b));
+    el.querySelectorAll(".hin").forEach(x => x.hidden = x.dataset.p !== HIST.period);
+    loadHistory();
+  });
+  el.querySelectorAll("#h-kind button").forEach(b => b.onclick = () => {
+    HIST.kind = b.dataset.k;
+    el.querySelectorAll("#h-kind button").forEach(x => x.classList.toggle("on", x === b));
+    renderHistory();
+  });
+  el.querySelectorAll(".hin input, .hin select").forEach(i => i.onchange = loadHistory);
+  loadHistory();
+}
+
+async function loadHistory() {
+  const [f, t] = histRange(), key = `${f}|${t}`;
+  const body = document.getElementById("h-body");
+  if (!body) return;
+  body.innerHTML = `<div class="hload"><div class="spin"></div>Завантаження…</div>`;
+  try {
+    HIST.data = await api("/api/range", {from: f, to: t}); HIST.key = key;
+    renderHistory();
+  } catch (e) { body.innerHTML = `<span class="muted small">Не вдалося завантажити: ${esc(e.message)}</span>`; }
+}
+
+const dayLabel = ms => new Date(ms).toLocaleDateString("uk-UA", {weekday: "short", day: "2-digit", month: "2-digit"});
+
+function renderHistory() {
+  const D = HIST.data, body = document.getElementById("h-body");
+  if (!D || !body) return;
+  if (D.error) { body.innerHTML = `<span class="muted">${esc(D.error)}</span>`; return; }
+  const days = D.days.filter(d => d.day <= D.now);
+  if (!days.length) { body.innerHTML = `<span class="muted">Немає даних за цей період</span>`; return; }
+  document.getElementById("hist").classList.remove("rankview");
+  document.getElementById("h-extra").innerHTML = "";  // перемикач «Мої регіони / Рейтинг» — лише для тривог
+  body.innerHTML = HIST.kind === "power" ? histPower(D, days) : HIST.kind === "alerts" ? histAlerts(D, days) : histWeather(D, days);
+}
+
+function histPower(D, days) {
+  const sum = k => days.reduce((a, d) => a + (d[k] || 0), 0);
+  const n = days.reduce((a, d) => a + d.outages, 0), planned = days.filter(d => d.plan).length;
+  // порівнюємо лише дні, де є графік і стеження, і графік — тільки за час, що вже минув
+  const cmp = days.filter(d => d.plan && d.observed);
+  const diff = cmp.reduce((a, d) => a + d.fact_off_h - d.plan_seen_h, 0);
+  const diffTxt = cmp.length ? `${diff >= 0 ? "+" : "−"}${hfmt(Math.abs(diff))}` : "—";
+  const head = `<div class="hsum">
+    <div><small>Без світла (факт)</small><b>${hfmt(sum("fact_off_h"))}</b><span>${n} відключ. · за ${days.length} дн.</span></div>
+    <div><small>За графіком ДТЕК</small><b>${hfmt(sum("plan_off_h"))}</b><span>${sum("plan_maybe_h") ? `+ можливо ${hfmt(sum("plan_maybe_h"))} · ` : ""}графік є за ${planned} дн.</span></div>
+    <div><small>Факт − графік</small><b>${diffTxt}</b><span>${sum("unknown_h") ? `невідомо ${hfmt(sum("unknown_h"))} (без інтернету) · ` : ""}лише за час, коли вже стежили (до зараз)</span></div></div>`;
+  if (D.detail) {
+    const A = {now: D.now, monitor_since: D.monitor_since, off: D.off || [], unknown: D.unknown || []};
+    const rows = days.map(d => `<div class="sched-day"><div class="lbl">${esc(dayLabel(d.day))}<span>факт ${hfmt(d.fact_off_h)} · графік ${hfmt(d.plan_off_h)}</span></div>
+      <div class="bars"><span class="cap">ДТЕК</span>${d.slots ? `<div class="bar48">${d.slots.map(s => `<i class="${s === "on" ? "" : s}"></i>`).join("")}</div>` : `<div class="fact"></div>`}
+      <span class="cap">Факт</span>${factBar(d.day, A)}</div></div>`).join("");
+    return head + rows + `<div class="ticks">${[0,3,6,9,12,15,18,21].map(h => `<span class="${h % 6 ? "x" : ""}">${String(h).padStart(2,"0")}:00</span>`).join("")}</div>
+      <div class="legend"><span><i></i>світло є</span><span><i class="off"></i>світла немає</span><span><i class="maybe"></i>можливе (ДТЕК)</span><span><i style="background:repeating-linear-gradient(45deg,var(--grid) 0 3px,transparent 3px 6px);border:1px solid var(--line)"></i>немає даних</span></div>`;
+  }
+  // довгий період — стовпчики по днях: графік ДТЕК (світліший) і факт (темніший), години без світла
+  const W = 1000, Hh = 150, top = Math.max(4, ...days.map(d => Math.max(d.plan_off_h + d.plan_maybe_h, d.fact_off_h)));
+  const bw = W / days.length, y = h => Hh - h / top * (Hh - 10);
+  const bars = days.map((d, i) => { const x = i * bw;
+    return `<rect x="${x + bw * .08}" y="${y(d.plan_off_h)}" width="${bw * .42}" height="${Hh - y(d.plan_off_h)}" fill="var(--off)" opacity=".45"><title>${dayLabel(d.day)} · графік ${hfmt(d.plan_off_h)}</title></rect>
+      ${d.plan_maybe_h ? `<rect x="${x + bw * .08}" y="${y(d.plan_off_h + d.plan_maybe_h)}" width="${bw * .42}" height="${y(d.plan_off_h) - y(d.plan_off_h + d.plan_maybe_h)}" fill="var(--maybe)" opacity=".7"/>` : ""}
+      <rect x="${x + bw * .5}" y="${y(d.fact_off_h)}" width="${bw * .42}" height="${Hh - y(d.fact_off_h)}" fill="var(--bad)"><title>${dayLabel(d.day)} · факт ${hfmt(d.fact_off_h)}${d.observed ? "" : " (ще не стежили)"}</title></rect>`; }).join("");
+  return head + `<div class="hchart"><svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">
+      ${[0, .5, 1].map(f => `<line x1="0" x2="${W}" y1="${y(top * f)}" y2="${y(top * f)}" stroke="var(--grid)" vector-effect="non-scaling-stroke"/>`).join("")}${bars}</svg>
+      <span class="rng">${Math.round(top)} год</span></div>${histAxis(days)}
+    <div class="legend"><span><i class="off" style="opacity:.45"></i>за графіком ДТЕК</span><span><i class="maybe"></i>можливе</span><span><i style="background:var(--bad)"></i>факт без світла</span></div>`;
+}
+
+function histAxis(days) {
+  const step = Math.max(1, Math.ceil(days.length / 8));
+  const fmt = ms => days.length > 62 ? new Date(ms).toLocaleDateString("uk-UA", {month: "short"}) : new Date(ms).toLocaleDateString("uk-UA", {day: "2-digit", month: "2-digit"});
+  return `<div class="haxis">${days.map((d, i) => i % step ? "" : `<span style="left:${(i + .5) / days.length * 100}%">${fmt(d.day)}</span>`).join("")}</div>`;
+}
+
+
+// 🚨 тривоги в історії: червоні й жовті відрізки по днях для кожного регіону (лише регіони з 🔔 у людей цієї ролі)
+const shortReg = n => n.replace(/ район$/, " р-н").replace(" територіальна громада", " громада");
+let alertView = "mine";
+function histAlerts(D, days) {
+  document.getElementById("h-extra").innerHTML = `<span class="seg" id="al-view">${[["mine", "📍 Мої регіони"], ["rank", "🏆 Рейтинг міст"]].map(([k, l]) =>
+    `<button data-v="${k}" class="${k === alertView ? "on" : ""}">${l}</button>`).join("")}</span>`;
+  const sw = "";
+  setTimeout(() => document.querySelectorAll("#al-view button").forEach(b => b.onclick = () => {
+    alertView = b.dataset.v; renderHistory(); if (alertView === "rank") loadRank(); }), 0);
+  document.getElementById("hist").classList.toggle("rankview", alertView === "rank");  // у рейтингу період не потрібен
+  if (alertView === "rank") { setTimeout(loadRank, 0); return sw + `<div id="rank-body"><div class="hload"><div class="spin"></div>Рахуємо рейтинг…</div></div>`; }
+  return sw + histAlertsMine(D, days);
+}
+
+// 🏆 рейтинг міст > 50 тис. за тривогами за 365 днів: менше годин під тривогою — безпечніше
+let RANK = null, rankAll = false;
+async function loadRank() {
+  const el = document.getElementById("rank-body"); if (!el) return;
+  try { if (!RANK || Date.now() - RANK._at > 300000) { RANK = await api("/api/arank"); RANK._at = Date.now(); } }
+  catch (e) { el.innerHTML = `<span class="muted">Не вдалося завантажити: ${esc(e.message)}</span>`; return; }
+  renderRank();
+}
+function renderRank() {
+  const el = document.getElementById("rank-body"); if (!el) return;
+  const R = RANK && RANK.rank;
+  if (!R || !R.cities) { el.innerHTML = `<span class="muted">Рейтинг ще не пораховано</span>`; return; }
+  const rows = R.cities, act = new Set(RANK.active || []), shown = rankAll ? rows : rows.slice(0, 20);
+  const maxH = Math.max(...shown.map(r => r.hours)) || 1;  // масштаб — під показані міста
+  const d = s => new Date(s).toLocaleDateString("uk-UA", {day: "2-digit", month: "2-digit", year: "numeric"});
+  el.innerHTML = `<div class="small muted" style="margin:0 0 8px">Міста України з населенням понад 50 тис. (оцінка Держстату 2022; окуповані не враховано) — за ${d(R.from)} – ${d(R.to)}.
+      Місто під тривогою, якщо вона в його громаді, районі або області. Місце — за сумарним часом під тривогою (менше — безпечніше).</div>
+    <div class="rank">${shown.map((r, i) => `<div class="rrow ${act.has(r.name) ? "now" : ""}">
+      <b class="rpos">${i + 1}</b>
+      <div class="rname">${esc(r.name)}<span>${esc((r.oblast || "").replace(" область", " обл."))} · ${r.pop} тис.${act.has(r.name) ? ` · <em>🚨 тривога зараз</em>` : ""}</span></div>
+      <div class="rbar"><i style="width:${Math.max(1, r.hours / maxH * 100)}%"></i></div>
+      <div class="rnum"><b>${Math.round(r.hours)} год</b><span>${r.n} трив. · ${r.share}% часу${r.n ? ` · ~${r.avg_min} хв` : ""}${r.partial_days ? ` · <span title="Днів, порахованих неповністю (тривог за день більше, ніж віддає джерело)">неповних днів: ${r.partial_days}</span>` : ""}${r.estimated ? ` · <span title="Частину відрізка ${r.est_from} – ${r.est_to} оцінено за середнім темпом тривог цього міста: у відкритих даних цього періоду немає">≈ оцінка</span>` : ""}</span></div>
+    </div>`).join("")}</div>
+    ${rows.length > 20 ? `<div class="gctl"><button id="rank-all">${rankAll ? "Лише топ-20" : `Показати всі ${rows.length} міст`}</button></div>` : ""}
+    <div class="small muted">Оновлюється раз на добу. Дані: відкритий набір github.com/Vadimkin/ukrainian-air-raid-sirens-dataset і історія тривог siren.pp.ua (раз на добу, за вчора).
+      «≈ оцінка» — у відкритих даних бракує частини осені 2026 р., її оцінено за темпом тривог міста.</div>`;
+  const b = document.getElementById("rank-all"); if (b) b.onclick = () => { rankAll = !rankAll; renderRank(); };
+}
+
+function histAlertsMine(D, days) {
+  const regs = D.alert_regions || [];
+  if (!regs.length) return `<div class="muted">Немає регіонів тривог з увімкненими сповіщеннями (🔔) — додайте в боті: 🚨 Тривоги.</div>`;
+  const tot = (r, k) => days.reduce((a, d) => a + (((d.alerts || {})[r] || {})[k] || 0), 0);
+  const head = `<div class="hsum">${regs.map(r => {
+    const n = tot(r, "n"), red = tot(r, "red_h"), yel = tot(r, "yellow_h"), all = red + yel;
+    return `<div><small>${PV(esc(shortReg(r)))}</small><b>${n} трив. · ${hfmt(all)}</b>
+      <span>🔴 ${hfmt(red)} · 🟡 ${hfmt(yel)}${n ? ` · у середньому ${hfmt(all / n)}` : ""}</span></div>`; }).join("")}</div>`;
+  const legend = `<div class="legend"><span><i style="background:var(--bad)"></i>червона тривога</span><span><i style="background:var(--maybe)"></i>жовта тривога</span>
+    <span><i style="background:var(--ok-bg);border:1px solid var(--line)"></i>тихо</span>
+    <span><i style="background:repeating-linear-gradient(45deg,var(--grid) 0 3px,transparent 3px 6px);border:1px solid var(--line)"></i>немає даних / ще не настало</span></div>`;
+  if (D.detail) {
+    const segs = D.alert_segments || {};
+    const bar = (d, r) => {
+      const d0 = d.day, d1 = d.end, W = d1 - d0, pct = t => (Math.min(Math.max(t, d0), d1) - d0) / W * 100;
+      const from = Math.max(d0, D.monitor_since || d0), to = Math.min(d1, D.now);
+      const calm = to > from ? `<b class="calm" style="left:${pct(from)}%;width:${pct(to) - pct(from)}%"></b>` : "";
+      const parts = (segs[r] || []).filter(([a, b]) => a < d1 && b > d0).map(([a, b, l]) =>
+        `<b class="${l === "red" ? "red" : "yel"}" style="left:${pct(a)}%;width:${Math.max(.4, pct(b) - pct(a))}%" title="${fmtT(Math.max(a, d0))}–${hhmm(Math.min(b, d1))} · ${l === "red" ? "червона" : "жовта"}"></b>`).join("");
+      return `<div class="fact abar">${calm}${parts}<span>${PV(esc(shortReg(r)))}</span></div>`;
+    };
+    const rows = days.map(d => {
+      const al = d.alerts || {}, n = regs.reduce((a, r) => a + ((al[r] || {}).n || 0), 0);
+      return `<div class="sched-day"><div class="lbl">${esc(dayLabel(d.day))}<span>${n ? `${n} трив.` : "без тривог"}</span></div>
+        <div class="bars">${regs.map(r => `<span class="cap">🚨</span>${bar(d, r)}`).join("")}</div></div>`;
+    }).join("");
+    return head + rows + `<div class="ticks">${[0,3,6,9,12,15,18,21].map(h => `<span class="${h % 6 ? "x" : ""}">${String(h).padStart(2,"0")}:00</span>`).join("")}</div>` + legend;
+  }
+  // довгий період — для кожного регіону стовпчики по днях: години під тривогою (червона знизу, жовта зверху)
+  const charts = regs.map(r => {
+    const W = 1000, Hh = 110, top = Math.max(2, ...days.map(d => (((d.alerts || {})[r] || {}).red_h || 0) + (((d.alerts || {})[r] || {}).yellow_h || 0)));
+    const bw = W / days.length, y = h => Hh - h / top * (Hh - 8);
+    const bars = days.map((d, i) => { const a = (d.alerts || {})[r] || {}, red = a.red_h || 0, yel = a.yellow_h || 0; if (!red && !yel) return "";
+      const x = i * bw + bw * .15, w = bw * .7;
+      return `<rect x="${x}" y="${y(red)}" width="${w}" height="${Hh - y(red)}" fill="var(--bad)"><title>${dayLabel(d.day)} · 🔴 ${hfmt(red)}</title></rect>
+        <rect x="${x}" y="${y(red + yel)}" width="${w}" height="${y(red) - y(red + yel)}" fill="var(--maybe)"><title>${dayLabel(d.day)} · 🟡 ${hfmt(yel)} · ${a.n || 0} трив.</title></rect>`; }).join("");
+    return `<div class="small" style="margin:8px 0 2px;font-weight:600">${PV(esc(shortReg(r)))}</div>
+      <div class="hchart" style="height:110px"><svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">${bars}</svg><span class="rng">${Math.round(top)} год</span></div>`;
+  }).join("");
+  return head + charts + histAxis(days) + `<div class="legend"><span><i style="background:var(--bad)"></i>червона, год/добу</span><span><i style="background:var(--maybe)"></i>жовта, год/добу</span></div>`;
+}
+
+function histWeather(D, days) {
+  const withS = days.filter(d => d.sensor), withF = days.filter(d => d.fc);
+  const avg = (arr, f) => arr.length ? arr.reduce((a, d) => a + f(d), 0) / arr.length : null;
+  const fA = avg(withF, d => d.fc.avg), sA = avg(withS, d => d.sensor.avg);
+  const both = days.filter(d => d.fc && d.sensor), diff = avg(both, d => d.sensor.avg - d.fc.avg);
+  const pr = withF.reduce((a, d) => a + d.fc.precip, 0), rainy = withF.filter(d => d.fc.precip >= .5).length;
+  const t = v => v == null ? "—" : `${v > 0 ? "" : ""}${v.toFixed(1)}°`;
+  const head = `<div class="hsum">
+    <div><small>Прогноз, середня</small><b>${t(fA)}</b><span>${withF.length ? `${Math.min(...withF.map(d => d.fc.min)).toFixed(0)}…${Math.max(...withF.map(d => d.fc.max)).toFixed(0)}° · ${withF.length} дн.` : "архіву прогнозу немає"}</span></div>
+    <div><small>Датчик «${esc(D.sensor_name || "Назовні")}», середня</small><b>${t(sA)}</b><span>${withS.length ? `${Math.min(...withS.map(d => d.sensor.min))}…${Math.max(...withS.map(d => d.sensor.max))}° · ${withS.length} дн.` : "даних датчика немає"}</span></div>
+    <div><small>Датчик − прогноз</small><b>${diff == null ? "—" : `${diff >= 0 ? "+" : "−"}${Math.abs(diff).toFixed(1)}°`}</b><span>опади за прогнозом ${pr.toFixed(1)} мм · ${rainy} дн. з дощем</span></div></div>`;
+  if (D.detail) {
+    const F = Object.fromEntries(D.weather_fields.map((f, i) => [f, i]));
+    const rows = days.map(d => {
+      const H = d.hours || [];
+      if (!H.length && !d.sensor) return `<div class="sched-day"><div class="lbl">${esc(dayLabel(d.day))}<span>немає даних</span></div><div></div></div>`;
+      const all = H.map(h => h[F.temperature_2m]).concat((D.sensor_temp || []).filter(p => p[0] >= d.day && p[0] < d.end).map(p => p[1]));
+      const lo = Math.floor(Math.min(...all)) - 1, hi = Math.ceil(Math.max(...all)) + 1;
+      return `<div class="sched-day"><div class="lbl">${esc(dayLabel(d.day))}<span>${[d.fc && `прогноз ${d.fc.min.toFixed(0)}…${d.fc.max.toFixed(0)}°`, d.sensor && `датчик ${d.sensor.min}…${d.sensor.max}°`,
+        d.fc && d.fc.precip && `${d.fc.precip} мм`, !d.fc && "прогнозу в архіві немає"].filter(Boolean).join(" · ")}</span></div>
+        <div class="bars"><span class="cap">Опади</span>${rainBars(d.day, d.end, H, F, D.sensor_hum || [])}
+        <span class="cap">Темп.</span>${wLine(d.day, d.end, H.map(h => [h[0], h[F.temperature_2m]]), D.sensor_temp || [], lo, hi, v => `${Math.round(v)}°`)}
+        <span class="cap">Волог.</span>${wLine(d.day, d.end, H.map(h => [h[0], h[F.relative_humidity_2m]]), D.sensor_hum || [], 0, 100, v => `${Math.round(v)}%`)}</div></div>`;
+    }).join("");
+    return head + rows + `<div class="ticks">${[0,3,6,9,12,15,18,21].map(h => `<span class="${h % 6 ? "x" : ""}">${String(h).padStart(2,"0")}:00</span>`).join("")}</div>
+      <div class="legend"><span><i style="background:none;border-top:2px dashed var(--chart);height:0;border-radius:0"></i>прогноз</span><span><i style="background:none;border-top:2px solid #ea580c;height:0;border-radius:0"></i>датчик</span><span><i style="background:#3b82f6"></i>опади, мм/год</span></div>`;
+  }
+  // довгий період — по днях: смуга мін…макс прогнозу (синя) і датчика (помаранчева), середні — лінії; опади — стовпчики
+  const W = 1000, Hh = 160, P = 40;
+  const vals = days.flatMap(d => [d.fc && d.fc.min, d.fc && d.fc.max, d.sensor && d.sensor.min, d.sensor && d.sensor.max]).filter(v => v != null);
+  if (!vals.length) return head + `<div class="muted">Немає даних погоди за цей період</div>`;
+  const lo = Math.floor(Math.min(...vals)) - 1, hi = Math.ceil(Math.max(...vals)) + 1, pTop = Math.max(5, ...days.map(d => d.fc ? d.fc.precip : 0));
+  const bw = W / days.length, X = i => (i + .5) * bw, Y = v => 6 + (Hh - 12) * (1 - (v - lo) / (hi - lo));
+  const band = (get, col) => days.map((d, i) => { const g = get(d); return g ? `<rect x="${i * bw + bw * .2}" y="${Y(g.max)}" width="${bw * .6}" height="${Math.max(1, Y(g.min) - Y(g.max))}" fill="${col}" opacity=".25"/>` : ""; }).join("");
+  const line = (get, col, dash) => { let p = "", pen = "M"; days.forEach((d, i) => { const g = get(d); if (g) { p += `${pen}${X(i).toFixed(1)},${Y(g.avg).toFixed(1)}`; pen = "L"; } else pen = "M"; });
+    return p ? `<path d="${p}" fill="none" stroke="${col}" stroke-width="2" ${dash ? 'stroke-dasharray="6 4"' : ""} vector-effect="non-scaling-stroke"/>` : ""; };
+  const zero = lo < 0 && hi > 0 ? `<line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>` : "";
+  const rain = days.map((d, i) => d.fc && d.fc.precip ? `<rect x="${i * bw + bw * .15}" y="${P - d.fc.precip / pTop * (P - 2)}" width="${bw * .7}" height="${d.fc.precip / pTop * (P - 2)}" fill="#3b82f6"><title>${dayLabel(d.day)} · ${d.fc.precip} мм</title></rect>` : "").join("");
+  return head + `<div class="hchart"><svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">${zero}
+      ${band(d => d.fc, "var(--chart)")}${band(d => d.sensor, "#ea580c")}${line(d => d.fc, "var(--chart)", true)}${line(d => d.sensor, "#ea580c", false)}</svg>
+      <span class="rng">${hi}°</span><span class="rng b">${lo}°</span></div>
+    <div class="hchart small-h"><svg viewBox="0 0 ${W} ${P}" preserveAspectRatio="none">${rain}</svg><span class="rng">опади, до ${pTop.toFixed(0)} мм/добу</span></div>
+    ${histAxis(days)}
+    <div class="legend"><span><i style="background:none;border-top:2px dashed var(--chart);height:0;border-radius:0"></i>прогноз (середня; смуга — мін…макс)</span>
+      <span><i style="background:none;border-top:2px solid #ea580c;height:0;border-radius:0"></i>датчик (середня; смуга — мін…макс)</span><span><i style="background:#3b82f6"></i>опади за прогнозом</span></div>`;
+}
+
+// ================= 🎮 Гра «Пляшечки»: розлий кольори так, щоб у кожній пляшечці був один колір =================
+// Рівні однакові для всіх (зерно = номер рівня), кожен перевіряється розв'язувачем — нерозв'язних рівнів немає.
+// Очки: за рівень 50 + 10 × кольорів, +25 якщо без «скасувати» і без допомоги. Допомога «🧪 +1 пляшечка» — 100 очок.
+const G = {cap: 4, level: 1, score: 0, tubes: [], start: [], hist: [], sel: -1, moves: 0, extra: 0, clean: true, won: false,
+  corked: new Set(), busy: false,
+  pid: "", name: "", tg: "", top: [], me: null, ready: false};
+const G_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316", "#06b6d4", "#ec4899", "#84cc16", "#78350f", "#64748b", "#1e3a8a"];
+const G_EXTRA_COST = 100, G_MAX_EXTRA = 2;
+const gStore = {get(k, d) { try { const v = localStorage.getItem("tuyahome.game." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("tuyahome.game." + k, JSON.stringify(v)); } catch (e) {} }};
+
+function gRng(seed) { // mulberry32 — однакова послідовність для однакового зерна
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+// Складність (18.11): сходинка кожні 5 рівнів — +1 колір (1–5: 3 кольори, 6–10: 4 … з 46-го: 12),
+// з 51-го — по 5 шарів у пляшечці, з 71-го — нижні шари приховані. Кожен 10-й рівень — 👑 бос:
+// на 1 колір більше, усі шари, крім верхнього, приховані (відкриваються, коли до них дійти), очки ×3.
+const gTier = n => Math.floor((n - 1) / 5);
+const gBoss = n => n % 10 === 0;
+const gColors = n => Math.min(3 + gTier(n) + (gBoss(n) ? 1 : 0), 12);
+const gCapOf = n => gTier(n) >= 10 ? 5 : 4;
+const gHidden = n => gBoss(n) || n > 70;
+const gEmpty = n => 2;
+
+function gTopRun(t) { if (!t.length) return 0; const c = t[t.length - 1]; let k = 0; for (let i = t.length - 1; i >= 0 && t[i] === c; i--) k++; return k; }
+function gCanPour(tubes, a, b) {
+  if (a === b) return false;
+  const A = tubes[a], B = tubes[b];
+  if (!A.length || B.length >= G.cap) return false;
+  return !B.length || B[B.length - 1] === A[A.length - 1];
+}
+function gPour(tubes, a, b) { // скільки шарів перелилось
+  const A = tubes[a], B = tubes[b], n = Math.min(gTopRun(A), G.cap - B.length);
+  for (let i = 0; i < n; i++) B.push(A.pop());
+  return n;
+}
+const gSolved = tubes => tubes.every(t => !t.length || (t.length === G.cap && t.every(c => c === t[0])));
+
+// розв'язувач (пошук у глибину з пам'яттю станів): чи можна пройти рівень
+function gSolvable(start, limit = 200000) {
+  const seen = new Set(); let nodes = 0;
+  const key = ts => ts.map(t => t.join(",")).sort().join("|");
+  const dfs = ts => {
+    if (gSolved(ts)) return true;
+    if (++nodes > limit) return null;
+    const k = key(ts); if (seen.has(k)) return false; seen.add(k);
+    for (let a = 0; a < ts.length; a++) {
+      const A = ts[a]; if (!A.length) continue;
+      const uniform = A.every(c => c === A[0]);
+      if (uniform && A.length === G.cap) continue;          // уже готова — не чіпаємо
+      let emptyTried = false;
+      for (let b = 0; b < ts.length; b++) {
+        if (!gCanPour(ts, a, b)) continue;
+        if (!ts[b].length) { if (uniform || emptyTried) continue; emptyTried = true; }  // однакові порожні — одна спроба
+        const nx = ts.map(t => t.slice()); gPour(nx, a, b);
+        const r = dfs(nx); if (r) return true; if (r === null) return null;
+      }
+    }
+    return false;
+  };
+  return dfs(start.map(t => t.slice()));
+}
+
+function gGenerate(n) {
+  const k = gColors(n), e = gEmpty(n);
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const rnd = gRng(n * 7919 + attempt * 104729);
+    const pool = []; for (let c = 0; c < k; c++) for (let i = 0; i < G.cap; i++) pool.push(c);
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const tubes = []; for (let c = 0; c < k; c++) tubes.push(pool.slice(c * G.cap, (c + 1) * G.cap));
+    if (tubes.some(t => t.every(x => x === t[0]))) continue;       // жодної готової пляшечки на старті
+    for (let i = 0; i < e; i++) tubes.push([]);
+    if (gSolvable(tubes) === true) return tubes;
+  }
+  return null;  // практично не трапляється — gLoad візьме інше зерно
+}
+
+function gPoints(n) { return (50 + 10 * gColors(n) + (gCapOf(n) - 4) * 50 + (gHidden(n) ? 40 : 0)) * (gBoss(n) ? 3 : 1); }
+
+function gLoad(n) {
+  G.cap = gCapOf(n);
+  let tubes = gGenerate(n);
+  for (let s = 1; !tubes && s < 5; s++) tubes = gGenerate(n + 1000 * s);
+  G.level = n; G.start = tubes.map(t => t.slice()); G.tubes = tubes.map(t => t.slice());
+  // приховані шари: скільки нижніх шарів у пляшечці ще не видно (верхній видно завжди)
+  G.startHid = tubes.map(t => gHidden(n) && t.length ? t.length - 1 : 0); G.hid = G.startHid.slice();
+  G.hist = []; G.sel = -1; G.moves = 0; G.extra = 0; G.clean = true; G.won = false; G.corked = new Set(); G.busy = false;
+  GB.corkT = {}; GB.lift = {}; GB.wave = {}; GB.anim = null;
+  gStore.set("level", n); gRender();
+}
+
+async function gClick(i) {
+  if (G.won || G.busy) return;
+  if (G.sel < 0) { if (G.tubes[i].length) G.sel = i; gRender(); return; }
+  if (G.sel === i) { G.sel = -1; gRender(); return; }
+  if (gCanPour(G.tubes, G.sel, i)) {
+    const a = G.sel, A = G.tubes[a], n = Math.min(gTopRun(A), G.cap - G.tubes[i].length);
+    G.busy = true; G.sel = -1;
+    try { await gAnimatePour(a, i, n, G_COLORS[A[A.length - 1]]); } catch (e) { /* анімація — не критично */ }
+    G.hist.push({tubes: G.tubes.map(t => t.slice()), hid: G.hid.slice()});
+    gPour(G.tubes, a, i); G.moves++; G.busy = false;
+    if (G.hid[a] >= G.tubes[a].length) G.hid[a] = Math.max(0, G.tubes[a].length - 1);
+    if (gSolved(G.tubes)) return gWin();
+  } else if (G.tubes[i].length) { G.sel = i; } else { G.sel = -1; }
+  gRender();
+}
+
+const gWait = ms => new Promise(r => setTimeout(r, ms));
+// переливання як рідини: пляшечка підлітає й нахиляється над ціллю, струмінь стікає, рівень у джерелі спадає, у цілі — росте
+// ================= 🧪 Пляшечки на canvas: рідина з фізикою =================
+// Як у «дорослих» реалізаціях (Unity-шейдери рідини в посудині): поверхня рідини завжди горизонтальна у світових
+// координатах, як би не нахилялась пляшечка; рідина виливається лише тоді, коли рівень доходить до нижнього краю
+// горлечка — отже, скільки вилилось, визначає кут нахилу (об'єм під краєм горлечка); струмінь падає по параболі
+// (гравітація), у цілі поверхня хвилюється й затухає, у джерелі після повернення — легке хлюпання.
+const GB = {cv: null, ctx: null, W: 0, H: 0, dpr: 1, pos: [], anim: null, wave: {}, lift: {}, corkT: {}, raf: 0, pat: null};
+const B_NW = 9, B_NL = 24, B_BW = 21, B_SH = 14, B_LEN = 152;       // горлечко (пів-ширина, довжина), корпус (пів-ширина), «плечі», довжина
+const B_SLOT = 62, B_ROWH = 196, B_TOPM = 64, B_LIFT = 14;
+const B_POLY = (() => {   // внутрішній контур пляшечки, локальні координати: (0,0) — центр горлечка, +y — уздовж пляшечки
+  const L = [[-B_NW, 0], [-B_NW, B_NL]];
+  for (let i = 1; i <= 7; i++) { const t = i / 7, u = 1 - t;
+    L.push([u * u * -B_NW + 2 * u * t * -B_BW + t * t * -B_BW, u * u * B_NL + 2 * u * t * B_NL + t * t * (B_NL + B_SH)]); }
+  const cy = B_LEN - B_BW;
+  L.push([-B_BW, cy]);
+  for (let i = 1; i < 14; i++) { const a = Math.PI - i * Math.PI / 14; L.push([B_BW * Math.cos(a), cy + B_BW * Math.sin(a)]); }
+  L.push([B_BW, cy]);
+  const right = L.slice(2, 9).map(([x, y]) => [-x, y]).reverse();
+  return L.concat(right, [[B_NW, B_NL], [B_NW, 0]]);
+})();
+const polyArea = p => { let s = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a[0] * b[1] - b[0] * a[1]; } return Math.abs(s) / 2; };
+function clipBelow(p, Y) {     // частина многокутника нижче горизонталі Y (екранні координати: y росте вниз)
+  const o = [];
+  for (let i = 0; i < p.length; i++) {
+    const A = p[i], B = p[(i + 1) % p.length], ia = A[1] >= Y, ib = B[1] >= Y;
+    if (ia) o.push(A);
+    if (ia !== ib) { const t = (Y - A[1]) / (B[1] - A[1]); o.push([A[0] + t * (B[0] - A[0]), Y]); }
+  }
+  return o;
+}
+const areaBelow = (p, Y) => { const c = clipBelow(p, Y); return c.length > 2 ? polyArea(c) : 0; };
+function levelFor(p, v) {     // рівень горизонтальної поверхні, під якою рівно v об'єму
+  let lo = Infinity, hi = -Infinity; for (const q of p) { lo = Math.min(lo, q[1]); hi = Math.max(hi, q[1]); }
+  if (v <= 0) return hi;
+  for (let k = 0; k < 26; k++) { const m = (lo + hi) / 2; if (areaBelow(p, m) > v) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+const toWorld = (p, mx, my, th) => { const c = Math.cos(th), s = Math.sin(th); return p.map(([x, y]) => [mx + x * c - y * s, my + x * s + y * c]); };
+const B_FULL = areaBelow(B_POLY, B_NL + B_SH * 0.45);   // повна пляшечка: корпус + трохи «плечей»
+const bUnit = () => B_FULL / G.cap;
+const easeIO = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+function lowerLip(th) { // нижній край горлечка при нахилі th (локальні координати)
+  const s = Math.sin(th); return s >= 0 ? [B_NW, 0] : [-B_NW, 0];
+}
+function capUnderLip(th) { // скільки рідини вміщається, поки рівень не дійде до нижнього краю горлечка
+  const w = toWorld(B_POLY, 0, 0, th), lp = toWorld([lowerLip(th)], 0, 0, th)[0];
+  return areaBelow(w, lp[1]);
+}
+function thetaFor(v, side) {    // кут, за якого під краєм горлечка рівно v (монотонно спадає з кутом)
+  let lo = 0, hi = 2.6;
+  if (capUnderLip(side * lo) <= v) return 0;
+  for (let k = 0; k < 28; k++) { const m = (lo + hi) / 2; if (capUnderLip(side * m) > v) lo = m; else hi = m; }
+  return side * (lo + hi) / 2;
+}
+
+function bLayout() {
+  const n = G.tubes.length, W = GB.W, per = Math.max(1, Math.min(n, Math.floor((W - 8) / B_SLOT)));
+  const rows = Math.ceil(n / per), pos = [];
+  for (let i = 0; i < n; i++) {
+    const r = Math.floor(i / per), inRow = Math.min(per, n - r * per), j = i - r * per;
+    const x0 = (W - inRow * B_SLOT) / 2 + B_SLOT / 2;
+    pos.push([x0 + j * B_SLOT, B_TOPM + r * B_ROWH]);
+  }
+  GB.pos = pos;
+  return B_TOPM + rows * B_ROWH - 30;
+}
+
+function gMountCanvas() {
+  const box = document.querySelector("#g-bottles .gtubes"); if (!box) return;
+  const cv = box.querySelector("canvas");
+  GB.cv = cv; GB.ctx = cv.getContext("2d"); GB.dpr = window.devicePixelRatio || 1;
+  GB.W = Math.max(280, box.clientWidth || 600);
+  GB.H = bLayout();
+  cv.width = GB.W * GB.dpr; cv.height = GB.H * GB.dpr; cv.style.width = GB.W + "px"; cv.style.height = GB.H + "px";
+  cv.onclick = ev => {
+    const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+    const i = GB.pos.findIndex(([mx, my]) => x >= mx - B_BW - 8 && x <= mx + B_BW + 8 && y >= my - 24 && y <= my + B_LEN + 6);
+    if (i >= 0) gClick(i);
+  };
+  if (!GB.raf) GB.raf = requestAnimationFrame(bFrame);
+}
+
+function bColor(name, fallback) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback; }
+
+function bFrame(ts) {
+  GB.raf = 0;
+  if (!GB.cv || !document.body.contains(GB.cv)) return;
+  GB.raf = requestAnimationFrame(bFrame);
+  if (document.hidden || !GB.cv.offsetParent) return;
+  const ctx = GB.ctx, now = performance.now();
+  ctx.setTransform(GB.dpr, 0, 0, GB.dpr, 0, 0);
+  ctx.clearRect(0, 0, GB.W, GB.H);
+  const A = GB.anim, U = bUnit();
+  const muted = bColor("--muted", "#6b7280"), accent = bColor("--accent", "#2563eb"), ok = bColor("--ok", "#15803d"), card = bColor("--card", "#fff");
+  if (!GB.pat) { const pc = document.createElement("canvas"); pc.width = pc.height = 10; const x = pc.getContext("2d");
+    x.fillStyle = "#4b5563"; x.fillRect(0, 0, 10, 10); x.strokeStyle = "#6b7280"; x.lineWidth = 3; x.beginPath(); x.moveTo(-2, 12); x.lineTo(12, -2); x.stroke(); GB.pat = ctx.createPattern(pc, "repeat"); }
+
+  // стан анімації переливання
+  let pose = null, srcVol = null, tgtExtra = 0, stream = null;
+  if (A) {
+    const t = now - A.t0, T1 = 380, T2 = A.T2, T3 = 380;
+    const rest = GB.pos[A.a];
+    const poseAt = th => { const lp = toWorld([lowerLip(th)], 0, 0, th)[0]; return [A.L[0] - lp[0], A.L[1] - lp[1], th]; };
+    const pouredAt = tt => { if (tt <= T1) return 0; const k = Math.min(1, (tt - T1) / T2);
+      const th = A.thA + (A.thB - A.thA) * easeIO(k); return Math.max(0, A.V0 - Math.min(A.V0, capUnderLip(th))); };
+    if (t < T1) {
+      const k = easeIO(t / T1), p1 = poseAt(A.thA * 0.98);
+      pose = [rest[0] + (p1[0] - rest[0]) * k, rest[1] - B_LIFT + (p1[1] - rest[1] + B_LIFT) * k, p1[2] * k];
+    } else if (t < T1 + T2) {
+      const k = (t - T1) / T2, th = A.thA + (A.thB - A.thA) * easeIO(k);
+      pose = poseAt(th);
+    } else if (t < T1 + T2 + T3) {
+      const k = easeIO((t - T1 - T2) / T3), p2 = poseAt(A.thB);
+      pose = [p2[0] + (rest[0] - p2[0]) * k, p2[1] + (rest[1] - p2[1]) * k, p2[2] * (1 - k)];
+    } else {
+      GB.wave[A.a] = {t0: now, amp: 1.6}; GB.wave[A.b] = {t0: now, amp: 2.4};
+      const done = A.resolve; GB.anim = null; done(); return;
+    }
+    const poured = pouredAt(t);
+    srcVol = A.V0 - poured;
+    const FALL = 110;                                   // час падіння струменя до поверхні в цілі
+    tgtExtra = pouredAt(t - FALL);
+    const rate = (pouredAt(t) - pouredAt(t - 50)) / 50; // об'єм за мс
+    const tEnd = T1 + T2;
+    if (t > T1 && t < tEnd + 160 && (rate > 1e-4 || t > tEnd)) {
+      stream = {rate, tail: t > tEnd ? (t - tEnd) / 160 : 0};
+    }
+    GB.wave[A.b] = {t0: now, amp: Math.min(3.2, 0.6 + rate * 900), live: true};
+  }
+
+  const order = GB.pos.map((_, i) => i).filter(i => !A || i !== A.a);
+  if (A) order.push(A.a);
+  for (const i of order) {
+    const t = G.tubes[i] || [], done = t.length === G.cap && t.every(c => c === t[0]);
+    if (done && !(i in GB.corkT)) GB.corkT[i] = now; else if (!done) delete GB.corkT[i];
+    const target = G.sel === i ? -B_LIFT : 0;
+    GB.lift[i] = (GB.lift[i] || 0) + (target - (GB.lift[i] || 0)) * 0.25;
+    let [mx, my] = GB.pos[i], th = 0;
+    my += GB.lift[i];
+    if (A && i === A.a && pose) [mx, my, th] = pose;
+    const poly = toWorld(B_POLY, mx, my, th);
+    // шари рідини (знизу вгору), обрізані об'ємом під час переливання
+    let layers = t.map((c, j) => ({c, v: U, hid: j < (G.hid[i] || 0)}));
+    if (A && i === A.a) { let left = srcVol; layers = layers.map(l => { const v = Math.max(0, Math.min(l.v, left)); left -= v; return {...l, v}; }).filter(l => l.v > 0.01); }
+    if (A && i === A.b && tgtExtra > 0) layers.push({c: A.ci, v: tgtExtra, hid: false});
+    const w = GB.wave[i]; let amp = 0, ph = now * 0.012;
+    if (w) { const age = now - w.t0; amp = w.live ? w.amp : w.amp * Math.exp(-age / 420) * Math.cos(age * 0.018); if (!w.live && age > 1800) delete GB.wave[i]; else if (w.live) w.live = false; }
+    ctx.save();
+    ctx.beginPath(); poly.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+    ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fill();
+    ctx.clip();
+    let cum = 0, yBottom = levelFor(poly, 0);
+    const xs = poly.map(q => q[0]), xmin = Math.min(...xs) - 4, xmax = Math.max(...xs) + 4;
+    layers.forEach((l, k) => {
+      cum += l.v;
+      const yTop = levelFor(poly, cum), last = k === layers.length - 1;
+      ctx.beginPath();
+      if (last && Math.abs(amp) > 0.05) {     // хвиля на поверхні
+        ctx.moveTo(xmin, yBottom + 1);
+        for (let x = xmin; x <= xmax; x += 3) ctx.lineTo(x, yTop + amp * Math.sin(x * 0.22 + ph));
+        ctx.lineTo(xmax, yBottom + 1);
+      } else ctx.rect(xmin, yTop, xmax - xmin, yBottom - yTop + 1);
+      ctx.fillStyle = l.hid ? GB.pat : G_COLORS[l.c]; ctx.fill();
+      if (l.hid && yBottom - yTop > 12) {
+        ctx.fillStyle = "#e5e7eb"; ctx.font = "bold 14px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("?", (xmin + xmax) / 2, (yTop + yBottom) / 2);
+      }
+      if (last) { ctx.fillStyle = "rgba(255,255,255,.28)"; ctx.fillRect(xmin, yTop + (Math.abs(amp) > .05 ? amp * 0 : 0), xmax - xmin, 2.5); }
+      yBottom = yTop;
+    });
+    ctx.restore();
+    // скло: контур, відблиск, ободок
+    ctx.save();
+    ctx.translate(mx, my); ctx.rotate(th);
+    ctx.fillStyle = "rgba(255,255,255,.22)";
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-B_BW + 5, B_NL + B_SH + 6, 5, B_LEN - B_NL - B_SH - 34, 3) : ctx.rect(-B_BW + 5, B_NL + B_SH + 6, 5, 80); ctx.fill();
+    ctx.restore();
+    ctx.lineWidth = 2.4; ctx.lineJoin = "round";
+    ctx.strokeStyle = G.sel === i ? accent : done ? ok : muted;
+    ctx.beginPath(); poly.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+    ctx.save(); ctx.translate(mx, my); ctx.rotate(th);
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-B_NW - 5, -5, 2 * B_NW + 10, 6, 3) : ctx.rect(-B_NW - 5, -5, 2 * B_NW + 10, 6);
+    ctx.fillStyle = card; ctx.fill(); ctx.stroke();
+    if (done) {                                // корок: падає з відскоком
+      const ct = Math.min(1, (now - GB.corkT[i]) / 520), bounce = 1 - Math.pow(1 - ct, 3) * Math.cos(ct * Math.PI * 2.2);
+      const dy = -34 * (1 - Math.min(1, bounce));
+      const g = ctx.createLinearGradient(0, -14 + dy, 0, 10 + dy); g.addColorStop(0, "#c8946a"); g.addColorStop(1, "#7b5233");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-B_NW - 1, -13 + dy, 2 * B_NW + 2, 22, 4) : ctx.rect(-B_NW - 1, -13 + dy, 2 * B_NW + 2, 22); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // струмінь: від нижнього краю горлечка — парабола під дією сили тяжіння до поверхні в цілі
+  if (A && stream) {
+    const tp = GB.pos[A.b], tpoly = toWorld(B_POLY, tp[0], tp[1] + (GB.lift[A.b] || 0), 0);
+    let vol = 0; G.tubes[A.b].forEach(() => { vol += U; }); vol += tgtExtra;
+    const surf = levelFor(tpoly, vol);
+    const [x0, y0] = A.L, g = 0.0024, vx = A.side * 0.02;   // px/мс², px/мс
+    const width = Math.max(2.2, Math.min(7, 2 + stream.rate * 1400));
+    const tf = Math.sqrt(2 * Math.max(4, surf - y0) / g);
+    const tStart = stream.tail * tf;                         // хвіст відривається від горлечка й падає
+    ctx.beginPath();
+    for (let k = 0; k <= 24; k++) { const tt = tStart + (tf - tStart) * k / 24; const x = x0 + vx * tt, y = y0 + g * tt * tt / 2; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.strokeStyle = G_COLORS[A.ci]; ctx.lineWidth = width; ctx.lineCap = "round"; ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = Math.max(1, width / 3); ctx.stroke();
+  }
+}
+
+window.addEventListener("resize", () => { if (GB.cv && GB.cv.offsetParent) gMountCanvas(); });
+
+async function gAnimatePour(a, b, n, color) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches || !GB.cv) return;
+  const U = bUnit(), V0 = G.tubes[a].length * U, P = n * U;
+  const tp = GB.pos[b], sp = GB.pos[a], side = tp[0] >= sp[0] ? 1 : -1;
+  const thA = thetaFor(V0, side), thB = thetaFor(V0 - P, side);
+  const ci = G.tubes[a][G.tubes[a].length - 1];
+  // нижній край горлечка — над горлечком цілі, трохи ближче до стінки з боку джерела
+  const L = [tp[0] - side * 3, tp[1] - 16];
+  return new Promise(res => { GB.anim = {a, b, n, ci, V0, side, thA, thB, L, T2: 420 + 360 * n, t0: performance.now(), resolve: res}; });
+}
+
+function gUndo() {
+  if (!G.hist.length || G.won) return;
+  const h = G.hist.pop(); G.tubes = h.tubes; G.hid = h.hid; G.moves = Math.max(0, G.moves - 1); G.clean = false; G.sel = -1; gRender();
+}
+function gRestart() { if (G.won) return; G.tubes = G.start.map(t => t.slice()); G.hid = G.startHid.slice(); G.hist = []; G.moves = 0; G.sel = -1; G.clean = false; gRender(); }  // куплені 🧪 лишаються
+function gAddTube() {
+  if (G.won || G.extra >= G_MAX_EXTRA || G.score < G_EXTRA_COST) return;
+  G.score -= G_EXTRA_COST; G.extra++; G.clean = false; G.tubes.push([]); G.start.push([]); G.hid.push(0); G.startHid.push(0);
+  gStore.set("score", G.score); gRender();
+}
+
+async function gWin() {
+  G.won = true;
+  const pts = gPoints(G.level) + (G.clean ? 25 : 0);
+  G.score += pts;
+  gStore.set("score", G.score); gStore.set("level", G.level + 1);
+  G.hid = G.hid.map(() => 0);
+  const msg = `${gBoss(G.level) ? "👑 Боса переможено!" : "🎉"} Рівень ${G.level} пройдено за ${G.moves} ходів! +${pts} очок${G.clean ? " (з бонусом за чисту гру)" : ""}`;
+  gRender(msg);
+  await gSync("score", {level: G.level, score: G.score});
+  gRender(msg);
+}
+
+async function gSync(kind, extra = {}) {
+  try {
+    const body = {initData: G.tg, pid: G.pid, name: G.name, ...extra};
+    const r = await fetch(`/api/game/${kind}?${new URLSearchParams({k: K})}`, {method: "POST", body: JSON.stringify(body)});
+    const d = await r.json();
+    G.top = d.top || G.top; if (d.me) G.me = d.me;
+    if (d.checkers_top) CS.top = d.checkers_top; if (d.me && d.me.checkers) CS.stats = d.me.checkers;
+  } catch (e) { /* без мережі — грати можна, рекорд запишеться наступного разу */ }
+}
+
+function gRender(banner) {
+  const el = document.getElementById("g-bottles"); if (!el || !G.ready) return;
+  const k = gColors(G.level), boss = gBoss(G.level);
+  const canExtra = !G.won && G.extra < G_MAX_EXTRA && G.score >= G_EXTRA_COST;
+  const myId = G.me && G.me.id;
+  const top = G.top.length ? G.top.map((r, i) => `<li class="${r.id === myId ? "me" : ""}"><b>${i + 1}.</b> ${PV(esc(r.name || "—"))}${r.tg ? "" : " <span class=muted>(браузер)</span>"}<span>рівень ${r.level} · ${r.score} оч.</span></li>`).join("")
+    : `<li class="muted">Ще немає рекордів — будьте першим!</li>`;
+  const nextBoss = Math.ceil(G.level / 10) * 10, feat = [`${k} кольорів`, G.cap === 5 ? "5 шарів" : "", gHidden(G.level) ? "приховані шари" : ""].filter(Boolean).join(" · ");
+  el.innerHTML = `<div class="sec-head"><h2>🧪 Пляшечки</h2><span class="small muted">гравець: <b>${PV(esc(G.name || "—"))}</b>${G.tg ? "" : ` · <a href="#" id="g-rename">змінити ім'я</a>`}</span></div>
+    ${boss ? `<div class="gboss">👑 Бос-рівень ${G.level}! Ще один колір, нижні шари приховані — відкриваються, коли до них доллєтесь. Очки ×3.</div>`
+      : `<div class="small muted gnext">Сходинка складності — кожні 5 рівнів (наступна на ${Math.floor((G.level - 1) / 5) * 5 + 6}-му), 👑 бос — на ${nextBoss}-му.</div>`}
+    <div class="gbar"><div><small>Рівень${boss ? " 👑" : ""}</small><b>${G.level}</b><span>${feat}</span></div><div><small>Очки</small><b>${G.score}</b><span>за рівень +${gPoints(G.level)}${G.clean ? " (+25)" : ""}</span></div>
+      <div><small>Ходи</small><b>${G.moves}</b><span>найкращий рівень: ${Math.max(G.me ? G.me.level : 0, G.level - 1)}</span></div></div>
+    ${banner ? `<div class="gwin">${banner} <button id="g-next">Далі ▶</button></div>` : ""}
+    <div class="gtubes ${boss ? "boss" : ""}"><canvas aria-label="Пляшечки: торкніться пляшечки, потім іншої"></canvas></div>
+    <div class="gctl"><button id="g-undo" ${G.hist.length && !G.won ? "" : "disabled"}>↶ Скасувати</button>
+      <button id="g-restart" ${G.won ? "disabled" : ""}>⟳ Заново</button>
+      <button id="g-extra" ${canExtra ? "" : "disabled"} title="Додає порожню пляшечку (до ${G_MAX_EXTRA} на рівень)">🧪 +1 пляшечка · ${G_EXTRA_COST} оч.</button></div>
+    <p class="small muted">Торкніться пляшечки, потім іншої — верхній колір переллється, якщо там порожньо або зверху той самий колір і є місце. «Скасувати», «Заново» і 🧪 — без бонусу +25. ❔ — прихований шар.</p>
+    <h3 class="gtop-h">🏆 Рекорди</h3><ol class="gtop">${top}</ol>`;
+  gMountCanvas();
+  el.querySelector("#g-undo").onclick = gUndo;
+  el.querySelector("#g-restart").onclick = gRestart;
+  el.querySelector("#g-extra").onclick = gAddTube;
+  const nx = el.querySelector("#g-next"); if (nx) nx.onclick = () => gLoad(G.level + 1);
+  const rn = el.querySelector("#g-rename"); if (rn) rn.onclick = ev => { ev.preventDefault(); gAskName(true); };
+}
+
+function gAskName(force) {
+  if (G.tg) return;
+  let n = gStore.get("name", "");
+  if (QS.get("privacy") === "1" && !force) { G.name = n || "Гравець"; return; }  // знімки екрана — без запитання
+  if (!n || force) { n = (prompt("Як вас записати в рекорди?", n || "") || n || "Гравець").trim().slice(0, 24); gStore.set("name", n); }
+  G.name = n; if (force) gSync("me").then(() => { gRender(); csRender(); });
+}
+
+let gIdent = null;
+function gIdentity() { // гравець: у Telegram — з підписаних даних міні-застосунку, у браузері — ім'я, яке ввели
+  if (gIdent) return gIdent;
+  try { G.tg = new URLSearchParams(location.hash.slice(1)).get("tgWebAppData") || ""; } catch (e) { G.tg = ""; }
+  G.pid = gStore.get("pid", ""); if (!G.pid) { G.pid = Math.random().toString(36).slice(2) + Date.now().toString(36); gStore.set("pid", G.pid); }
+  if (!G.tg) gAskName(false);
+  gIdent = gSync("me").then(() => { if (G.tg && G.me) G.name = G.me.name; });
+  return gIdent;
+}
+
+// вкладка «🎮 Гра»: підвкладки «🧪 Пляшечки» і «⛀ Шашки» (остання вибрана — запам'ятовується)
+let gameTab = gStore.get("tab", "bottles");
+if (!["bottles", "checkers"].includes(gameTab)) gameTab = "bottles";
+function initGame() {
+  const el = document.getElementById("game");
+  if (!el.dataset.ready) {
+    el.dataset.ready = "1";
+    el.innerHTML = `<div class="gsub"><span class="seg" id="g-sub"><button data-g="bottles">🧪 Пляшечки</button><button data-g="checkers">⛀ Шашки</button></span></div>
+      <div id="g-bottles"></div><div id="g-checkers"></div>`;
+    el.querySelectorAll("#g-sub button").forEach(b => b.onclick = () => { gameTab = b.dataset.g; gStore.set("tab", gameTab); showGame(); });
+  }
+  showGame();
+}
+function showGame() {
+  document.querySelectorAll("#g-sub button").forEach(b => b.classList.toggle("on", b.dataset.g === gameTab));
+  document.getElementById("g-bottles").hidden = gameTab !== "bottles";
+  document.getElementById("g-checkers").hidden = gameTab !== "checkers";
+  return gameTab === "checkers" ? initCheckers() : initBottles();
+}
+
+async function initBottles() {
+  if (G.ready) return gRender();
+  G.ready = true;
+  document.getElementById("g-bottles").innerHTML = `<div class="hload"><div class="spin"></div>Готуємо рівень…</div>`;
+  await gIdentity();
+  if (G.tg && G.me) G.name = G.me.name;
+  // прогрес: більший з локального і серверного (грали з іншого пристрою)
+  const lvl = Math.max(gStore.get("level", 1), G.me ? (G.me.level || 0) + 1 : 1);
+  const local = gStore.get("score", null);  // очки витрачаються на 🧪, тож беремо поточні, а не максимум
+  G.score = local != null && (!G.me || gStore.get("level", 1) - 1 >= (G.me.level || 0)) ? local : (G.me ? G.me.score || 0 : 0);
+  setTimeout(() => gLoad(lvl), 20);
+}
+
+// ================= ⛀ Шашки (звичні правила): 8×8, грають чорні поля; простá шашка ходить уперед на 1, б'є вперед і назад;
+// бити обов'язково, кілька взяттів підряд — до кінця (можна обрати будь-який варіант, не обов'язково найдовший);
+// дамка ходить і б'є по діагоналі на будь-яку відстань; шашка, що дійшла до останнього ряду під час взяття, стає дамкою
+// і продовжує бити вже як дамка. Побиті шашки знімаються після ходу (через одну двічі не перестрибнути — «турецький удар»).
+// Дошка — масив 64: 0 = a8 … 63 = h1; w/W — білі шашка/дамка (знизу, йдуть угору), b/B — чорні.
+const CK = (() => {
+  const DIRS = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+  const on = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8, idx = (r, c) => r * 8 + c;
+  const colorOf = p => !p ? null : p.toLowerCase();
+  const isKing = p => p === "W" || p === "B";
+  const name = i => "abcdefgh"[i & 7] + (8 - (i >> 3));
+
+  function start() {
+    const b = Array(64).fill("");
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) {
+      if (r < 3) b[idx(r, c)] = "b"; else if (r > 4) b[idx(r, c)] = "w";
+    }
+    return {b, turn: "w", quiet: 0, keys: []};
+  }
+
+  // усі серії взяттів шашки з поля from (рекурсивно), кожна — {from, to, path, caps, promote}
+  function captures(b, from, piece) {
+    const col = colorOf(piece), out = [];
+    const walk = (sq, king, caps, path) => {
+      const [r, c] = [sq >> 3, sq & 7];
+      let found = false;
+      for (const [dr, dc] of DIRS) {
+        if (king) {
+          let rr = r + dr, cc = c + dc;
+          while (on(rr, cc) && !b[idx(rr, cc)]) { rr += dr; cc += dc; }
+          if (!on(rr, cc)) continue;
+          const mid = idx(rr, cc);
+          if (colorOf(b[mid]) === col || caps.includes(mid)) continue;
+          let lr = rr + dr, lc = cc + dc;
+          while (on(lr, lc) && !b[idx(lr, lc)]) {
+            const land = idx(lr, lc); found = true;
+            walk(land, true, caps.concat(mid), path.concat(land));
+            lr += dr; lc += dc;
+          }
+        } else {
+          const mr = r + dr, mc = c + dc, lr = r + 2 * dr, lc = c + 2 * dc;
+          if (!on(lr, lc)) continue;
+          const mid = idx(mr, mc), land = idx(lr, lc);
+          if (!b[mid] || colorOf(b[mid]) === col || caps.includes(mid) || b[land]) continue;
+          found = true;
+          const promo = (col === "w" && lr === 0) || (col === "b" && lr === 7);
+          walk(land, promo, caps.concat(mid), path.concat(land));
+        }
+      }
+      if (!found && caps.length) {
+        const to = path[path.length - 1], r2 = to >> 3;
+        out.push({from, to, path, caps, promote: !isKing(piece) && (king || (col === "w" && r2 === 0) || (col === "b" && r2 === 7))});
+      }
+    };
+    // на час пошуку шашка «знята» з початкового поля (через нього можна пройти дамкою)
+    const saved = b[from]; b[from] = "";
+    walk(from, isKing(piece), [], [from]);
+    b[from] = saved;
+    return out;
+  }
+
+  function legal(s) {
+    const {b, turn} = s, caps = [], quiet = [];
+    for (let i = 0; i < 64; i++) {
+      const p = b[i]; if (!p || colorOf(p) !== turn) continue;
+      caps.push(...captures(b, i, p));
+      if (caps.length) continue;
+      const [r, c] = [i >> 3, i & 7];
+      for (const [dr, dc] of DIRS) {
+        if (isKing(p)) {
+          let rr = r + dr, cc = c + dc;
+          while (on(rr, cc) && !b[idx(rr, cc)]) { quiet.push({from: i, to: idx(rr, cc), path: [i, idx(rr, cc)], caps: [], promote: false}); rr += dr; cc += dc; }
+        } else {
+          if ((turn === "w" && dr > 0) || (turn === "b" && dr < 0)) continue;   // проста шашка — лише вперед
+          const rr = r + dr, cc = c + dc;
+          if (on(rr, cc) && !b[idx(rr, cc)]) quiet.push({from: i, to: idx(rr, cc), path: [i, idx(rr, cc)], caps: [],
+            promote: (turn === "w" && rr === 0) || (turn === "b" && rr === 7)});
+        }
+      }
+    }
+    return caps.length ? caps : quiet;
+  }
+
+  function make(s, m) {
+    const b = s.b.slice(), p = b[m.from];
+    b[m.from] = ""; m.caps.forEach(q => { b[q] = ""; });
+    b[m.to] = m.promote ? p.toUpperCase() : p;
+    return {b, turn: s.turn === "w" ? "b" : "w", quiet: m.caps.length || !isKing(p) ? 0 : s.quiet + 1, keys: s.keys};
+  }
+  const posKey = s => s.b.map(p => p || ".").join("") + s.turn;
+  function play(s, m) { const n = make(s, m); n.keys = s.keys.concat([posKey(s)]); return n; }
+
+  function status(s) {
+    const moves = legal(s);
+    if (!moves.length) return {over: true, result: s.turn === "w" ? "b" : "w",
+      why: s.b.some(p => colorOf(p) === s.turn) ? "немає ходів" : "усі шашки побито"};
+    if (s.quiet >= 30) return {over: true, result: "d", why: "15 ходів лише дамками без взяття"};
+    const k = posKey(s);
+    if (s.keys.filter(x => x === k).length >= 2) return {over: true, result: "d", why: "триразове повторення"};
+    return {over: false, mustCapture: moves[0].caps.length > 0, moves};
+  }
+
+  function evaluate(b) { // з погляду білих
+    let v = 0;
+    for (let i = 0; i < 64; i++) {
+      const p = b[i]; if (!p) continue;
+      const r = i >> 3, c = i & 7, centre = (c >= 2 && c <= 5 && r >= 2 && r <= 5) ? 6 : 0;
+      let x;
+      if (p === "w") x = 100 + (7 - r) * 5 + centre + (r === 7 ? 8 : 0);    // задній ряд тримає оборону
+      else if (p === "b") x = 100 + r * 5 + centre + (r === 0 ? 8 : 0);
+      else x = 300 + centre;
+      v += colorOf(p) === "w" ? x : -x;
+    }
+    return v;
+  }
+
+  function negamax(s, depth, alpha, beta, ply, ctx) {
+    ctx.nodes++;
+    const moves = legal(s);
+    if (!moves.length) return -100000 + ply;
+    if (depth <= 0 && !moves[0].caps.length) return (s.turn === "w" ? 1 : -1) * evaluate(s.b);
+    if (depth <= -4) return (s.turn === "w" ? 1 : -1) * evaluate(s.b);   // обов'язкові взяття дораховуємо, але не безкінечно
+    moves.sort((x, y) => y.caps.length - x.caps.length);
+    let best = -Infinity;
+    for (const m of moves) {
+      const sc = -negamax(make(s, m), depth - 1, -beta, -alpha, ply + 1, ctx);
+      if (sc > best) best = sc;
+      if (sc > alpha) alpha = sc;
+      if (alpha >= beta || ctx.nodes > ctx.limit) break;
+    }
+    return best;
+  }
+
+  const LEVELS = {easy: {depth: 2, noise: 60}, medium: {depth: 5, noise: 8}, hard: {depth: 8, noise: 0}};
+  function bestMove(s, level = "medium") {
+    const L = LEVELS[level] || LEVELS.medium, ctx = {nodes: 0, limit: 400000};
+    const moves = legal(s);
+    let best = null, bestSc = -Infinity, alpha = -Infinity;
+    for (const m of moves) {
+      let sc = -negamax(make(s, m), L.depth - 1, -Infinity, -alpha, 1, ctx);
+      if (L.noise) sc += (Math.random() - 0.5) * 2 * L.noise;
+      if (sc > bestSc) { bestSc = sc; best = m; }
+      if (sc > alpha) alpha = sc;
+    }
+    return best;
+  }
+
+  return {start, legal, play, make, status, bestMove, colorOf, isKing, name, evaluate};
+})();
+
+// ---- інтерфейс шашок (гравець проти комп'ютера), анімації, результати в базу
+const CS = {s: null, hist: [], sel: -1, level: "medium", side: "w", busy: false, last: null, over: null, ready: false, stats: null, top: []};
+const LEVEL_UA = {easy: "Легко", medium: "Середньо", hard: "Складно"};
+const csStore = {get(k, d) { try { const v = localStorage.getItem("tuyahome.checkers." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("tuyahome.checkers." + k, JSON.stringify(v)); } catch (e) {} }};
+const csPos = sq => { let r = sq >> 3, c = sq & 7; if (CS.side === "b") { r = 7 - r; c = 7 - c; } return [r, c]; };
+
+function csNew() {
+  CS.s = CK.start(); CS.hist = []; CS.sel = -1; CS.last = null; CS.over = null; CS.busy = false;
+  csSave(); csRender();
+  if (CS.side === "b") csAi();
+}
+function csSave() { csStore.set("game", {s: CS.s, hist: CS.hist.slice(-200), last: CS.last, over: CS.over, level: CS.level, side: CS.side}); }
+
+function csStatus() {
+  const st = CK.status(CS.s);
+  if (st.over && !CS.over) {
+    CS.over = st;
+    csSync("checkers", {result: st.result === "d" ? "draw" : st.result === CS.side ? "win" : "loss", level: CS.level});
+  }
+  return st;
+}
+
+function csRender() {
+  const el = document.getElementById("g-checkers"); if (!el || !CS.ready) return;
+  const st = CS.over || CK.status(CS.s);
+  const legal = st.over ? [] : st.moves;
+  const mine = !st.over && CS.s.turn === CS.side && !CS.busy;
+  const targets = CS.sel >= 0 ? legal.filter(m => m.from === CS.sel) : [];
+  const movable = mine ? new Set(legal.map(m => m.from)) : new Set();
+  let squares = "";
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const sq = CS.side === "b" ? (7 - r) * 8 + (7 - c) : r * 8 + c;
+    const dark = (r + c) % 2 === 1, t = targets.find(m => m.to === sq);
+    const cls = ["csq", dark ? "dk" : "lt", CS.last && CS.last.path && CS.last.path.includes(sq) ? "lastm" : "", CS.sel === sq ? "seld" : "",
+      t ? "dot" : "", mine && st.mustCapture && movable.has(sq) ? "must" : ""].join(" ");
+    const coord = (c === 0 ? `<em class="rk">${8 - (sq >> 3)}</em>` : "") + (r === 7 ? `<em class="fl">${"abcdefgh"[sq & 7]}</em>` : "");
+    squares += `<div class="${cls}" data-sq="${sq}">${coord}</div>`;
+  }
+  let pieces = "";
+  CS.s.b.forEach((p, sq) => {
+    if (!p) return;
+    const [r, c] = csPos(sq);
+    pieces += `<span class="pc ${CK.colorOf(p)} ${CK.isKing(p) ? "king" : ""}" data-sq="${sq}" style="transform:translate(${c * 100}%,${r * 100}%)"><i></i></span>`;
+  });
+  const cnt = col => CS.s.b.filter(p => CK.colorOf(p) === col).length;
+  const me = CS.side, ai = me === "w" ? "b" : "w";
+  let msg;
+  if (CS.over) {
+    const r = CS.over.result;
+    msg = r === "d" ? `🤝 Нічия — ${CS.over.why}` : r === me ? `🎉 Перемога! (у суперника ${CS.over.why})` : `😔 Поразка — у вас ${CS.over.why}`;
+  } else if (CS.busy && CS.s.turn !== me) msg = "🤔 Комп'ютер думає…";
+  else msg = CS.s.turn === me ? (st.mustCapture ? "⚔️ Ваш хід — треба бити!" : "Ваш хід") : "Хід комп'ютера";
+  const s = CS.stats || {};
+  const line = lv => { const x = s[lv] || {}; return `${LEVEL_UA[lv]}: ${x.w || 0}–${x.l || 0}–${x.d || 0}`; };
+  const top = CS.top.length ? CS.top.map((t, i) => `<li><b>${i + 1}.</b> ${PV(esc(t.name || "—"))}<span>${t.pts} оч. · ${t.w} перемог</span></li>`).join("")
+    : `<li class="muted">Ще немає перемог — будьте першим!</li>`;
+  el.innerHTML = `
+    <div class="cs-ctl"><span class="seg" id="cs-level">${Object.entries(LEVEL_UA).map(([k, v]) => `<button data-l="${k}" class="${k === CS.level ? "on" : ""}">${v}</button>`).join("")}</span>
+      <span class="seg" id="cs-side"><button data-s="w" class="${me === "w" ? "on" : ""}">⚪ Білими</button><button data-s="b" class="${me === "b" ? "on" : ""}">⚫ Чорними</button></span></div>
+    <div class="cs-msg ${CS.over ? (CS.over.result === me ? "win" : CS.over.result === "d" ? "draw" : "loss") : st.mustCapture && CS.s.turn === me ? "check" : ""}">${msg}</div>
+    <div class="cs-caps">Суперник: ${cnt(ai)} шаш.</div>
+    <div class="cs-board ck" id="cs-board">${squares}<div class="cs-pieces">${pieces}</div></div>
+    <div class="cs-caps">Ви: ${cnt(me)} шаш.</div>
+    <div class="gctl"><button id="cs-new">♻️ Нова партія</button><button id="cs-undo" ${CS.hist.length && !CS.busy ? "" : "disabled"}>↶ Скасувати хід</button></div>
+    <p class="small muted">Бити обов'язково (такі шашки підсвічено), кілька взяттів — до кінця; шашка б'є й назад, на останньому ряду стає дамкою (👑) і ходить на будь-яку відстань. Ваші результати (перемоги–поразки–нічиї): ${line("easy")} · ${line("medium")} · ${line("hard")}. Перемога: Легко — 1 очко, Середньо — 2, Складно — 3.</p>
+    <h3 class="gtop-h">🏆 Рекорди в шашках</h3><ol class="gtop">${top}</ol>`;
+  // клітинку визначаємо за точкою натиску на дошці: працює будь-де в межах клітинки й під шашкою
+  el.querySelector("#cs-board").onclick = ev => {
+    const bd = ev.currentTarget.getBoundingClientRect();
+    const c = Math.floor((ev.clientX - bd.left) / bd.width * 8), r = Math.floor((ev.clientY - bd.top) / bd.height * 8);
+    if (r < 0 || r > 7 || c < 0 || c > 7) return;
+    csClick(CS.side === "b" ? (7 - r) * 8 + (7 - c) : r * 8 + c);
+  };
+  el.querySelectorAll("#cs-level button").forEach(b => b.onclick = () => { CS.level = b.dataset.l; csStore.set("level", CS.level); csSave(); csRender(); });
+  el.querySelectorAll("#cs-side button").forEach(b => b.onclick = () => {
+    if (b.dataset.s === CS.side) return;
+    if (CS.hist.length && !CS.over && !confirm("Почати нову партію іншим кольором?")) return;
+    CS.side = b.dataset.s; csStore.set("side", CS.side); csNew(); });
+  el.querySelector("#cs-new").onclick = () => { if (!CS.over && CS.hist.length > 1 && !confirm("Почати нову партію? Поточну буде втрачено.")) return; csNew(); };
+  el.querySelector("#cs-undo").onclick = csUndo;
+}
+
+function csClick(sq) {
+  if (CS.busy || CS.over || CS.s.turn !== CS.side) return;
+  const p = CS.s.b[sq];
+  if (CS.sel >= 0) {
+    const m = CK.legal(CS.s).find(m => m.from === CS.sel && m.to === sq);
+    if (m) { CS.sel = -1; return csMove(m); }
+  }
+  const can = CK.legal(CS.s).some(m => m.from === sq);
+  CS.sel = p && CK.colorOf(p) === CS.side && can && CS.sel !== sq ? sq : -1;
+  csRender();
+}
+
+const csWait = ms => new Promise(r => setTimeout(r, ms));
+// анімація: шашка ковзає по кожному стрибку, побиті — зникають одна за одною; перетворення на дамку — спалах і корона
+async function csAnimate(m) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const box = document.querySelector("#cs-board .cs-pieces"); if (!box) return;
+  const at = sq => box.querySelector(`.pc[data-sq="${sq}"]`);
+  const e = at(m.from); if (!e) return;
+  e.classList.add("moving");
+  for (let k = 1; k < m.path.length; k++) {
+    const [r, c] = csPos(m.path[k]);
+    e.style.transform = `translate(${c * 100}%,${r * 100}%)`;
+    if (m.caps.length) { e.classList.add("hop"); }
+    await csWait(m.caps.length ? 260 : 300);
+    e.classList.remove("hop");
+    if (m.caps[k - 1] != null) { const t = at(m.caps[k - 1]); if (t) t.classList.add("taken"); }
+  }
+  if (m.promote) { e.classList.add("king", "promoted"); await csWait(450); }
+}
+
+async function csMove(m) {
+  CS.busy = true; CS.sel = -1; csRender();
+  await csAnimate(m);
+  CS.hist.push(CS.s); CS.s = CK.play(CS.s, m); CS.last = {from: m.from, to: m.to, path: m.path};
+  CS.busy = false;
+  const st = csStatus(); csSave(); csRender();
+  if (!st.over && CS.s.turn !== CS.side) csAi();
+}
+
+async function csAi() {
+  CS.busy = true; csRender();
+  await csWait(300);
+  const t0 = performance.now();
+  const m = CK.bestMove(CS.s, CS.level);
+  const spent = performance.now() - t0;
+  if (spent < 400) await csWait(400 - spent);
+  if (m) { CS.busy = false; await csMove(m); } else CS.busy = false;
+}
+
+function csUndo() {
+  if (CS.busy || !CS.hist.length) return;
+  // назад до свого ходу: хід комп'ютера і свій
+  CS.s = CS.hist.pop();
+  while (CS.hist.length && CS.s.turn !== CS.side) CS.s = CS.hist.pop();
+  CS.over = null; CS.last = null; CS.sel = -1; csSave(); csRender();
+  if (CS.s.turn !== CS.side) csAi();
+}
+
+async function csSync(kind, extra = {}) {
+  try {
+    const body = {initData: G.tg, pid: G.pid, name: G.name, ...extra};
+    const r = await fetch(`/api/game/${kind}?${new URLSearchParams({k: K})}`, {method: "POST", body: JSON.stringify(body)});
+    const d = await r.json();
+    if (d.me) CS.stats = d.me.checkers || CS.stats;
+    if (d.checkers_top) CS.top = d.checkers_top;
+    if (kind !== "me") csRender();
+  } catch (e) { /* без мережі — грати можна */ }
+}
+
+async function initCheckers() {
+  const el = document.getElementById("g-checkers");
+  if (CS.ready) return csRender();
+  CS.ready = true;
+  el.innerHTML = `<div class="hload"><div class="spin"></div>Розставляємо шашки…</div>`;
+  await gIdentity();
+  CS.level = csStore.get("level", "medium"); CS.side = csStore.get("side", "w");
+  const saved = csStore.get("game", null);
+  if (saved && saved.s && saved.s.b && saved.s.b.length === 64) Object.assign(CS, {s: saved.s, hist: saved.hist || [], last: saved.last, over: saved.over, side: saved.side || CS.side});
+  else CS.s = CK.start();
+  if (G.me) { CS.stats = G.me.checkers || null; }
+  await csSync("me");
+  csRender();
+  if (!CS.over && CS.s.turn !== CS.side) csAi();
 }
 
 async function renderSchedule() {
@@ -443,8 +1600,8 @@ async function renderSchedule() {
       <div class="bars"><span class="cap">ДТЕК</span><div class="bar48">${d.slots.map(s => `<i class="${s === "on" ? "" : s}"></i>`).join("")}${nowPos}</div>
       <span class="cap">Факт</span>${factBar(d.day, A)}</div></div>`;
   }).join("");
-  el.innerHTML = `<div class="sec-head"><h2>Графік відключень · черга ${esc(sc.group)}</h2>
-      <span class="small muted">${esc(sc.address)} · ДТЕК оновив ${esc(sc.update || "—")}</span></div>
+  el.innerHTML = `<div class="sec-head"><h2>Графік відключень · черга ${PV(esc(sc.group))}</h2>
+      <span class="small muted">${PV(esc(sc.address))} · ДТЕК оновив ${esc(sc.update || "—")}</span></div>
     <div class="next">${nextTxt}</div>${rows}
     <div class="ticks">${[0,3,6,9,12,15,18,21].map(h => `<span class="${h % 6 ? "x" : ""}">${String(h).padStart(2,"0")}:00</span>`).join("")}</div>
     <div class="legend"><span><i></i>світло є</span><span><i class="off"></i>світла немає</span><span><i class="maybe"></i>можливе відключення</span>
@@ -531,6 +1688,7 @@ async function renderCharts(redraw = true) {
   for (const s of series) {
     const card = wrap.querySelector(`[data-chart="${CSS.escape(s.key)}"]`);
     card.querySelector(".val").innerHTML = `${s.d.value}<small>${esc(unit(s.d.unit))}</small>${s.dev.online ? "" : ` <small>офлайн</small>`}`;
+    card.classList.toggle("offline", !s.dev.online);  // прилад не в мережі — картка сіра (значення останнє відоме)
     if (redraw && openCharts.has(s.key)) jobs.push(drawChart(card, s));
   }
   await Promise.all(jobs);
@@ -660,15 +1818,18 @@ async function renderLists() {
   document.getElementById("out-sum").textContent =
     `За 7 днів: без світла ${dur(sum("outage_end", S.outage?.start))} · без інтернету ${dur(sum("internet_up", netDown))}`;
   const cur = [];
-  if (S.outage) cur.push(`<li><span class="t">${fmtT(S.outage.start, 1)}</span><span><span class="kind power">світло</span><b>зараз немає</b> · ${dur(S.now - S.outage.start)}</span></li>`);
-  if (netDown) cur.push(`<li><span class="t">${fmtT(netDown, 1)}</span><span><span class="kind net">інтернет</span><b>зараз немає</b> · ${dur(S.now - netDown)}</span></li>`);
+  // зліва — дата, справа — «з … до …» (час кінця з датою, якщо закінчилось іншого дня)
+  const dd = ms => new Date(ms).toLocaleDateString("uk-UA", {day: "2-digit", month: "2-digit"});
+  const till = (a, b) => dd(a) === dd(b) ? fmtT(b) : fmtT(b, 1);
+  if (S.outage) cur.push(`<li><span class="t">${dd(S.outage.start)}</span><span><span class="kind power">без світла</span>з ${fmtT(S.outage.start)} · <b>зараз немає</b> · ${dur(S.now - S.outage.start)}</span></li>`);
+  if (netDown) cur.push(`<li><span class="t">${dd(netDown)}</span><span><span class="kind net">без інтернету</span>з ${fmtT(netDown)} · <b>зараз немає</b> · ${dur(S.now - netDown)}</span></li>`);
   const past = events.filter(e => e.kind === "outage_end" || e.kind === "internet_up").map(e => {
-    const k = e.kind === "outage_end" ? ["power", "світло"] : ["net", "інтернет"];
-    return `<li><span class="t">${fmtT(e.start, 1)}</span><span><span class="kind ${k[0]}">${k[1]}</span>до ${fmtT(e.end)} · ${dur(e.end - e.start)}</span></li>`;
+    const k = e.kind === "outage_end" ? ["power", "без світла"] : ["net", "без інтернету"];
+    return `<li><span class="t">${dd(e.start)}</span><span><span class="kind ${k[0]}">${k[1]}</span>з ${fmtT(e.start)} до ${till(e.start, e.end)} · ${dur(e.end - e.start)}</span></li>`;
   });
   document.getElementById("outages").innerHTML = cur.concat(past).join("") || `<li class="dim">Поки не було</li>`;
   document.getElementById("events").innerHTML = events.slice(0, 80).map(e =>
-    `<li class="${["online","offline"].includes(e.kind) ? "dim" : ""}"><span class="t">${fmtT(e.ts, 1)}</span><span>${esc(e.text)}</span></li>`).join("")
+    `<li class="${["online","offline"].includes(e.kind) ? "dim" : ""}"><span class="t">${fmtT(e.ts, 1)}</span><span>${PVTEXT(esc(e.text))}</span></li>`).join("")
     || `<li class="dim">Подій ще немає</li>`;
 }
 
@@ -712,11 +1873,47 @@ async function load() {
     document.getElementById("err").style.display = "none";
     renderHeader(); renderDevices(); renderQuota(); renderRanges();
     await Promise.all([renderSchedule(), renderWeather(), renderCharts(), renderLists()]);
+    document.body.classList.remove("loading");
   } catch (e) {
+    if (document.body.classList.contains("loading")) {  // перше завантаження не вдалось — пишемо на екрані завантаження
+      document.getElementById("loader").classList.add("err");
+      document.getElementById("loader-msg").textContent = `Не вдалося завантажити (${e.message}). Повтор за хвилину…`;
+      return;
+    }
     const el = document.getElementById("err"); el.style.display = "block"; el.textContent = `Не вдалося оновити: ${e.message}`;
   }
 }
-load(); setInterval(load, 60000);
+document.body.dataset.top = "power";
+function applyDeepLink() {
+  const tab = QS.get("tab"); if (!tab) return;
+  const b = document.querySelector(`#toptabs [data-t="${tab}"]`); if (b) b.click();
+  setTimeout(() => {
+    if (tab === "history") {
+      if (QS.get("hp")) { const p = document.querySelector(`#h-period [data-p="${QS.get("hp")}"]`); if (p) p.click(); }
+      if (QS.get("hk")) { const k = document.querySelector(`#h-kind [data-k="${QS.get("hk")}"]`); if (k) k.click(); }
+      if (QS.get("av")) setTimeout(() => { const v = document.querySelector(`#al-view [data-v="${QS.get("av")}"]`); if (v) v.click(); }, 1500);
+    }
+    if (tab === "game" && QS.get("game")) { const g = document.querySelector(`#g-sub [data-g="${QS.get("game")}"]`); if (g) g.click(); }
+    if (tab === "weather" && QS.get("wt")) { wTab = QS.get("wt"); renderWeather(); }
+  }, 600);
+}
+document.querySelectorAll("#toptabs button").forEach(b => b.onclick = () => {
+  document.body.dataset.top = b.dataset.t;
+  if (b.dataset.t === "history") initHistory();
+  if (b.dataset.t === "game") initGame();
+  document.querySelectorAll("#toptabs button").forEach(x => x.classList.toggle("on", x === b));
+});
+// 19.11: відкриті у фоні дашборди щохвилини смикали Lambda (по кілька запитів) — разом з ботом
+// вичерпували ліміт акаунта на 10 одночасних запусків, і Telegram отримував відмову. Тепер оновлюємо лише видиму сторінку.
+let lastLoad = 0;
+async function tick(force) {
+  if (document.hidden || document.body.dataset.top === "game") return;
+  if (!force && Date.now() - lastLoad < 55000) return;
+  lastLoad = Date.now();
+  await load();
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+load().then(() => { lastLoad = Date.now(); applyDeepLink(); }); setInterval(tick, 60000);
 </script>
 </body>
 </html>

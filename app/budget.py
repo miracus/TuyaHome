@@ -56,17 +56,14 @@ def log_schedule(cfg, devices):
 def _count_runs(snapshot_every, intervals):
     """Скільки запитів на місяць дає прилад з такими інтервалами параметрів, якщо Lambda запускається
     раз на snapshot_every хв, а параметри, що настали одночасно, йдуть одним запитом."""
-    last = {i: -math.inf for i in intervals}
-    calls = 0
-    t = 0
-    while t < MONTH_MIN:
-        due = [i for i in intervals if t - last[i] >= i]
-        if due:
-            calls += 1
-            for i in due:
-                last[i] = t
-        t += snapshot_every
-    return calls
+    # 19.11: замість покрокової симуляції місяця (21 600 кроків × 30 ітерацій пошуку × прилади — 1,5 с процесора
+    # на кожне оновлення дашборда) — те саме аналітично. Кожен параметр спрацьовує на старті, далі кожні
+    # ceil(i / крок) кроків; запуски, що збіглися, — один запит. Отже запитів = розмір об'єднання цих прогресій.
+    steps = math.ceil(MONTH_MIN / snapshot_every)
+    fired = set()
+    for i in intervals:
+        fired.update(range(0, steps, max(1, math.ceil(i / snapshot_every))))
+    return len(fired)
 
 
 def plan(cfg, devices):

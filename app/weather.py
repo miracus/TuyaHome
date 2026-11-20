@@ -176,6 +176,77 @@ def for_web(store, cfg, now):
             "daily_fields": ["ts"] + DAILY, "week": [r for r in meta.get("daily") or [] if r[0] >= today][:7]}
 
 
+def _km(lat1, lon1, lat2, lon2):
+    import math
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 6371 * 2 * math.asin(math.sqrt(a))
+
+
+def user_location(u, cfg):
+    """Прогноз за адресою користувача: (lat, lon, назва), якщо адреса має координати і далі home_radius_km від дому
+    (або це гість). Ближче до дому чи адреса без координат (задана до 17.11) — None: погода дому з датчиком."""
+    wc = cfg.get("weather") or {}
+    a = u.get("addr") or {}
+    if a.get("lat") is None or a.get("lon") is None or not wc:
+        return None
+    far = _km(a["lat"], a["lon"], wc["lat"], wc["lon"]) > wc.get("home_radius_km", 5)
+    if far or u.get("access") == "guest":
+        return a["lat"], a["lon"], a.get("label") or ""
+    return None
+
+
+def point(store, cfg, lat, lon, now):
+    """Прогноз для довільної точки (адреса користувача): кеш meta weather@lat,lon, оновлення раз на 30 хв."""
+    wc = cfg.get("weather") or {}
+    key = f"weather@{lat:.2f},{lon:.2f}"
+    meta = store.get_meta(key) or {}
+    if now - meta.get("fetched", 0) >= 30 * MIN:
+        try:
+            meta = {**fetch({**wc, "lat": round(lat, 3), "lon": round(lon, 3)}, cfg), "fetched": now}
+            store.put_meta(key, meta)
+        except Exception as e:  # джерело недоступне — віддаємо старий прогноз, якщо є
+            meta = {**meta, "error": f"{type(e).__name__}: {e}"}
+    return meta
+
+
+def forecast_lines(meta, cfg, now):
+    """Лише прогноз (без поточного стану й датчика): решта сьогодні по 3 год, завтра, тиждень."""
+    out = []
+    rows = meta.get("hourly") or []
+    today = _day_start(now, cfg)
+    tomorrow = _day_start(today + 36 * 3_600_000, cfg)
+    nxt = [r for r in rows if now <= r[0] < tomorrow][::3][:6]
+    if nxt:
+        out.append("Сьогодні:")
+        for r in nxt:
+            ico, _ = describe(r[3])
+            out.append(f"{fmt_time(r[0], cfg)}  {ico} {r[1]:.0f}°, {r[2]}%" + (f", опади {r[4]}%" if r[4] else ""))
+    week = [r for r in meta.get("daily") or [] if r[0] >= tomorrow][:6]
+    if week:
+        out.append("")
+        out.append("Далі:")
+        for r in week:
+            ico, desc = describe(r[1])
+            day = datetime.fromtimestamp(r[0] / 1000, local_tz(cfg))
+            wd = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"][day.weekday()]
+            rain = f", {r[4]:.1f} мм ({r[5]}%)" if r[4] else (f", опади {r[5]}%" if r[5] else "")
+            out.append(f"{wd} {day:%d.%m}  {ico} {r[2]:.0f}…{r[3]:.0f}°, {desc}{rain}")
+    return out
+
+
+def forecast_text(store, cfg, now, lat, lon, label):
+    meta = point(store, cfg, lat, lon, now)
+    out = [f"🌤 Прогноз погоди · {label}".rstrip(" ·")]
+    lines = forecast_lines(meta, cfg, now)
+    if not lines:
+        return out[0] + "\nПрогноз зараз недоступний, спробуйте пізніше"
+    out += [""] + lines
+    if meta.get("fetched"):
+        out.append(f"\nOpen-Meteo, оновлено {fmt_time(meta['fetched'], cfg)}")
+    return "\n".join(out)
+
+
 def weather_text(store, cfg, now, states=None):
     """Відповідь бота «🌤 Погода»: датчик зараз, прогноз зараз, різниця, найближчі години і завтра."""
     wc = cfg.get("weather") or {}
