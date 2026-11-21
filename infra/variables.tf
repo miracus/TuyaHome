@@ -46,3 +46,9 @@ variable "telegram_chat_id" {
   type    = string
   default = ""
 }
+
+variable "monthly_budget_usd" {
+  description = "Місячний бюджет AWS, USD: понад нього (факт або прогноз) — сигнал власнику в Telegram"
+  type        = string
+  default     = "1"
+}

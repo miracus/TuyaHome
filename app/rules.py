@@ -1,6 +1,7 @@
 """Правила: що змінилося між попереднім і поточним опитуванням → історія, події, сповіщення."""
+import climate
 from budget import device_rules
-from devices import dp, fmt_duration, fmt_time, is_number
+from devices import battery_dps, dp, fmt_duration, fmt_time, is_number
 
 MIN = 60_000
 HOUR = 60 * MIN
@@ -23,6 +24,44 @@ def _alert_due(meta, key, now, cooldown_ms):
         alerts[key] = now
         return True
     return False
+
+
+def battery_track(track, value, now, cfg):
+    """Зрізи заряду [[ts, %], ...]: при зміні або раз на годину, за останні battery_drain_window_h.
+    Заміна батареї (зростання заряду) обнуляє ряд."""
+    track = [list(p) for p in (track or [])]
+    if track and value > track[-1][1]:
+        track = []
+    if not track or now - track[-1][0] >= HOUR or value != track[-1][1]:
+        track.append([now, value])
+    keep_from = now - cfg.get("battery_drain_window_h", 96) * HOUR
+    return [p for p in track if p[0] >= keep_from][-200:]
+
+
+def battery_drain(track, now, cfg):
+    """Швидке падіння: від останнього зрізу з початковим зарядом до зараз.
+    Заряд приходить кроками по 10 %, тож один крок не рахуємо (обережна оцінка)."""
+    if len(track) < 2:
+        return None
+    start = track[0][1]
+    t0 = max(p[0] for p in track if p[1] >= start)   # останній момент, коли ще було «start»
+    cur = track[-1][1]
+    drop = start - cur
+    step = cfg.get("battery_step_pct", 10)
+    hours = (now - t0) / HOUR
+    if drop < 2 * step or hours < cfg.get("battery_drain_min_h", 6):  # не реагувати на стрибки при заміні
+        return None
+    per_day = (drop - step) / hours * 24
+    if per_day < cfg.get("battery_drain_pct_day", 5):
+        return None
+    return {"start": start, "cur": cur, "hours": hours, "per_day": per_day, "days_left": cur / per_day}
+
+
+def battery_drain_text(name, d):
+    left = f" Такими темпами сяде приблизно за {max(1, round(d['days_left']))} дн." if d["cur"] > 0 else ""
+    return (f"🔋 Батарея сідає надто швидко: {name} — {d['start']}→{d['cur']} % за {round(d['hours'])} год "
+            f"(~{round(d['per_day'])} % на добу, норма 1–2 %).{left} Спробуйте скинути датчик і підключити "
+            f"знову біля хаба; якщо не допоможе — датчик бракований.")
 
 
 def _is_alarm(value, cfg):
@@ -64,6 +103,9 @@ def evaluate(prev_states, devices, meta, cfg, now):
         prev = prev_states.get(dev["id"])
         state = dict(dev)
         name = dev["name"]
+        for k in ("batt_track", "clim"):  # службові ряди живуть у стані між знімками (і поки прилад офлайн)
+            if prev and prev.get(k):
+                state[k] = dict(prev[k])
 
         # --- поява / перейменування
         if prev is None:
@@ -119,11 +161,19 @@ def evaluate(prev_states, devices, meta, cfg, now):
                         res.event("voltage", voltage_text(v, name, cfg), dev["id"], notify=True, value=v)
 
             # --- батарея
-            for d in dev["dps"]:
-                if "battery" in d["code"].lower() and d["unit"] == "%" and is_number(d["value"]):
-                    if d["value"] < cfg.get("battery_low_pct", 15) and _alert_due(
-                            meta, f"batt:{dev['id']}", now, 24 * HOUR):
-                        res.event("battery", f"Сідає батарея: {name} — {d['value']} %", dev["id"], notify=True)
+            for d in battery_dps(dev):
+                if d["value"] < cfg.get("battery_low_pct", 15) and _alert_due(
+                        meta, f"batt:{dev['id']}", now, 24 * HOUR):
+                    res.event("battery", f"Сідає батарея: {name} — {d['value']} %", dev["id"], notify=True)
+                track = battery_track(state.get("batt_track", {}).get(d["code"]), d["value"], now, cfg)
+                state.setdefault("batt_track", {})[d["code"]] = track
+                drain = battery_drain(track, now, cfg)
+                if drain and _alert_due(meta, f"battdrain:{dev['id']}", now,
+                                        cfg.get("battery_drain_cooldown_h", 72) * HOUR):
+                    res.event("battery_drain", battery_drain_text(name, drain), dev["id"], notify=True)
+
+            # --- мікроклімат у кімнатах (вологість, холод)
+            climate.check(dev, state, meta, cfg, now, res.event)
 
             # --- історія зі знімка. DP з source=log пише журнал приладу (poller), тут їх пропускаємо.
             hist_ts = dict(prev.get("hist_ts", {})) if prev else {}
@@ -257,6 +307,17 @@ def _power_and_internet(res, devices, meta, cfg, now):
         res.event("outage_end", f"💡 Світло є з {fmt_time(now, cfg)}. Не було {fmt_duration(now - start)} "
                                 f"(з {fmt_time(start, cfg, with_date=True)}){approx}",
                   notify=True, start=start, end=now)
+
+    # збої зв'язку Zigbee: усі прилади від мережі зникали, але відключення не підтвердилось — лише в журнал
+    # (рахуються в щотижневому звіті про стан приладів)
+    if meta.get("outage"):
+        meta.pop("glitch", None)
+    elif watch and all(not d["online"] for d in watch):
+        meta.setdefault("glitch", max(states[d["id"]].get("offline_since") or now for d in watch))
+    elif meta.get("glitch"):
+        g = meta.pop("glitch")
+        res.event("power_glitch", f"Збій зв'язку Zigbee: усі прилади від мережі зникали на {fmt_duration(now - g)}, "
+                  f"світло було", start=g, end=now)
 
     # «світло є з …» для дашборда: момент останньої зміни; уперше — з коли розетка онлайн
     if meta.get("outage"):

@@ -123,3 +123,9 @@ def normalize(dev, specs, cfg):
 
 def dp(device, code):
     return next((d for d in device["dps"] if d["code"] == code), None)
+
+
+def battery_dps(device):
+    """Параметри заряду батареї, %: battery_percentage, va_battery, battery (у датчика дверей — без одиниць)."""
+    return [d for d in device.get("dps", []) if "battery" in d["code"].lower() and "state" not in d["code"].lower()
+            and is_number(d.get("value")) and (d.get("unit") in ("%", "", None)) and 0 <= d["value"] <= 100]

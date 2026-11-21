@@ -5,6 +5,7 @@ import json
 import os
 import time
 
+import accuracy
 import schedule
 import weather
 from budget import plan
@@ -32,6 +33,32 @@ def user_for_key(keys, given):
 
 
 PAGES = {"/": "dashboard.html", "/index.html": "dashboard.html"}
+# PWA (21.11): іконки й service worker — без ключа (нічого особистого); маніфест — з ключем (start_url = посилання людини)
+STATIC = {"/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
+          "/static/icon-192.png": ("static/icon-192.png", "image/png"),
+          "/static/icon-512.png": ("static/icon-512.png", "image/png"),
+          "/static/icon-maskable.png": ("static/icon-maskable.png", "image/png"),
+          "/static/apple-touch-icon.png": ("static/apple-touch-icon.png", "image/png")}
+
+
+def static_file(path):
+    name, ctype = STATIC[path]
+    with open(os.path.join(HERE, name), "rb") as f:
+        data = f.read()
+    headers = {"Content-Type": ctype, "Cache-Control": "no-cache" if path == "/sw.js" else "public, max-age=604800",
+               "X-Robots-Tag": "noindex"}
+    if ctype.startswith("text/"):
+        return {"statusCode": 200, "headers": headers, "body": data.decode("utf-8")}
+    import base64
+    return {"statusCode": 200, "headers": headers, "body": base64.b64encode(data).decode(), "isBase64Encoded": True}
+
+
+def manifest(key):
+    icons = [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+             {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+             {"src": "/static/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]
+    return {"name": "Дім · TuyaHome", "short_name": "Дім", "lang": "uk", "start_url": f"/?k={key}", "scope": "/",
+            "display": "standalone", "background_color": "#f4f5f7", "theme_color": "#1e3a8a", "icons": icons}
 
 
 def visible_alerts(store, role):
@@ -78,9 +105,14 @@ def handle_telegram(store, cfg, headers, body):
 def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
     if path == "/tg" and method == "POST":
         return handle_telegram(store, cfg, headers, body)
+    if path in STATIC and method == "GET":
+        return static_file(path)
     user = user_for_key(keys, qs.get("k", ""))
     if not user:
         return _resp(404, "Not found", "text/plain")
+
+    if path == "/manifest.webmanifest":
+        return _resp(200, manifest(qs.get("k", "")), "application/manifest+json; charset=utf-8")
 
     if path in PAGES:
         print(f"{path} opened by {user}")
@@ -104,6 +136,7 @@ def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
             "last_internet_outage": rules.get("last_internet_outage"),
             "power_ids": [d["id"] for d in power_devices(states, cfg)],
             "schedule": sched,
+            "sched_acc": accuracy.summary_text(store.get_meta("sched_acc")),
             "air_alerts": alerts,
             "tuya_rooms": (store.get_meta("tuya_rooms") or {}).get("by_device", {}),
             "tuya_room_order": (store.get_meta("tuya_rooms") or {}).get("rooms", []),

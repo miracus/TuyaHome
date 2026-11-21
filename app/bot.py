@@ -242,6 +242,27 @@ def cmd_weather(c):
     return weather.weather_text(c["store"], c["cfg"], c["now"], c["states"])
 
 
+DIGEST_BTN = "☀️ Ранковий підсумок"
+
+
+def digest_button(u):
+    return f"{DIGEST_BTN}: {'увімк.' if u.get('digest', True) else 'вимк.'}"
+
+
+@command("morning", "☀️ Ранковий підсумок зараз")
+def cmd_morning(c):
+    import reports
+    return reports.digest_text(c["store"], c["cfg"], c.get("u") or {}, c["now"], c["states"])
+
+
+@command("health", "🩺 Стан приладів за тиждень (власнику)")
+def cmd_health(c):
+    if (c.get("u") or {}).get("role") != "owner":
+        return "Звіт про стан приладів — лише для власника."
+    import reports
+    return reports.health_text(c["store"], c["cfg"], c["now"])
+
+
 @command("settings", "⚙️ Налаштування: адреса, звук, користувачі")
 def cmd_settings(c):
     return None  # кнопки — у handle_update (settings_view)
@@ -273,9 +294,9 @@ BUTTON_CMD["⬅️ Назад"] = "back"
 # Гість — лише тривоги й графік для своєї адреси (без даних дому)
 GUEST_BUTTONS = [["🚨 Тривоги", "📅 Графік ДТЕК"], ["🌤 Погода", "⚙️ Налаштування"]]
 GUEST_KEYBOARD = {**KEYBOARD, "keyboard": [[{"text": t} for t in row] for row in GUEST_BUTTONS]}
-GUEST_CMDS = {"start", "alerts", "schedule", "address", "sound", "settings", "weather", "back"}
+GUEST_CMDS = {"start", "alerts", "schedule", "address", "sound", "settings", "weather", "back", "morning"}
 # у меню команд (синя кнопка «Меню») — те саме, що на кнопках; решта команд працює, але не показується
-MENU_HIDDEN = {"help", "internet", "dtek", "address", "sound", "back"}
+MENU_HIDDEN = {"help", "internet", "dtek", "address", "sound", "back", "morning", "health"}
 
 
 def settings_keyboard(u):
@@ -344,7 +365,8 @@ def menu_screen(u, users, cfg, screen, store=None):
     if screen == "alerts" or screen.startswith(("areg:", "acat")):
         return alerts_screen(store, u, cfg, screen)
     if screen == "settings":
-        rows = [["📍 Моя адреса", "🔔 Звук"]] + ([["👥 Користувачі"]] if u.get("role") == "owner" else []) + [[BACK]]
+        rows = ([["📍 Моя адреса", "🔔 Звук"], [digest_button(u)]] + ([["👥 Користувачі"]] if u.get("role") == "owner" else [])
+                + [[BACK]])
         return _kb(rows, "⚙️ Налаштування"), "⚙️ Налаштування"
     if screen == "sound":
         b = list(_sound_buttons(u))
@@ -531,6 +553,11 @@ def handle_menu(store, cfg, notifier, users, uid, text, msg_id, web):
             print(f"alerts menu: {type(e).__name__}: {e}")
             return _goto(store, notifier, cfg, uid, "alerts", msg_id, users, "⚠️ Довідник регіонів зараз недоступний")
     if screen == "settings":
+        if text.startswith(DIGEST_BTN):
+            u["digest"] = not u.get("digest", True)
+            note = ("☀️ Ранковий підсумок увімкнено: щодня о 7:00 — погода й коли буде світло." if u["digest"]
+                    else "☀️ Ранковий підсумок вимкнено.")
+            return _goto(store, notifier, cfg, uid, "settings", msg_id, users, note)
         if text == "🔔 Звук":
             return _goto(store, notifier, cfg, uid, "sound", msg_id, users)
         if text == "👥 Користувачі" and u.get("role") == "owner":

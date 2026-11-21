@@ -16,8 +16,8 @@ provider "aws" {
 }
 
 locals {
-  cfg           = jsondecode(file("${path.module}/../app/config.json"))
-  snapshot_min  = local.cfg.polling.snapshot_every_min
+  cfg          = jsondecode(file("${path.module}/../app/config.json"))
+  snapshot_min = local.cfg.polling.snapshot_every_min
   app_env = {
     TABLE_NAME = aws_dynamodb_table.main.name
   }

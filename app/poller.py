@@ -12,6 +12,8 @@ from datetime import datetime
 import air_alerts
 import arank
 import schedule
+import accuracy
+import reports
 import weather
 from budget import device_rules, plan
 from devices import fmt_time, is_number, load_config, local_tz, normalize, parse_model, parse_specification, scaled
@@ -23,7 +25,7 @@ def _service_to(store):
     import bot
     return bot.owners(bot.get_users(store)) or None
 
-SERVICE_EVENTS = {"power_source_down"}  # події правил, що йдуть лише власнику
+SERVICE_EVENTS = {"power_source_down", "battery_drain"}  # події правил, що йдуть лише власнику
 GRACE_MS = 30_000  # запуск за розкладом може прийти на кілька секунд раніше
 
 
@@ -145,6 +147,14 @@ def run(store, api, cfg, notifier, uid, now=None):
         summary["weather"] = weather.run(store, cfg, now)
     except Exception as e:  # погода не повинна ламати опитування
         summary["weather"] = f"{type(e).__name__}: {e}"
+    # --- точність графіка ДТЕК (раз на добу) і регулярні повідомлення (ранковий підсумок, стан приладів за тиждень)
+    for key, fn in (("sched_acc", lambda: accuracy.run(store, cfg, now)),
+                    ("reports", lambda: reports.run(store, cfg, notifier, now))):
+        try:
+            summary[key] = fn()
+        except Exception as e:  # не повинні ламати опитування
+            summary[key] = f"{type(e).__name__}: {e}"
+            print(f"[poller] {key}: {type(e).__name__}: {e}")
     # --- відповіді ДТЕК на заявку «немає світла» (лише поки заявка «жива», див. dtek.py)
     summary["dtek"] = _dtek_replies(store, cfg, notifier, now)
 

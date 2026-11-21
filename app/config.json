@@ -81,6 +81,34 @@
   "voltage_low": 200,
   "voltage_alert_cooldown_min": 30,
   "battery_low_pct": 15,
+  "battery_drain_pct_day": 5,
+  "battery_drain_window_h": 96,
+  "battery_drain_min_h": 6,
+  "battery_drain_cooldown_h": 72,
+  "climate": {
+    "hum_high": 65,
+    "hum_hours": 3,
+    "cold_c": 16,
+    "cold_rate_c_h": 0.3,
+    "cold_ahead_h": 3,
+    "notify_from": 9,
+    "notify_to": 21,
+    "exclude": []
+  },
+  "morning_digest": {
+    "enabled": true,
+    "hour": 7,
+    "until_hour": 10
+  },
+  "weekly_health": {
+    "enabled": true,
+    "weekday": 0,
+    "hour": 10
+  },
+  "schedule_accuracy": {
+    "window_days": 30,
+    "min_matched": 5
+  },
   "alarm_values": [
     "alarm",
     "1",

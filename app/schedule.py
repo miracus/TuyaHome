@@ -271,7 +271,11 @@ def outage_context(store, cfg, start):
     if hit and hit[2] == "off":
         a, b, _ = hit
         # 19.11: про ДТЕК пишемо лише тоді, коли справді треба звертатись (аварійне / не повернули вчасно)
-        return f"📅 За графіком: відключення {fmt_time(a, cfg)}–{_hh(b, cfg)}, світло мають повернути о {_hh(b, cfg)}."
+        # 21.11: з історії — коли насправді вмикають для цієї черги (медіана зсуву, accuracy.py)
+        import accuracy
+        usual = accuracy.usual_end(store.get_meta("sched_acc"), b, cfg)
+        tail = f" (зазвичай вмикають о {usual})" if usual else ""
+        return f"📅 За графіком: відключення {fmt_time(a, cfg)}–{_hh(b, cfg)}, світло мають повернути о {_hh(b, cfg)}{tail}."
     if hit:
         a, b, _ = hit
         return (f"🟡 За графіком {fmt_time(a, cfg)}–{_hh(b, cfg)} — можливе відключення, ймовірно, це воно. "
