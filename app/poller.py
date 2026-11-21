@@ -17,7 +17,7 @@ import reports
 import weather
 from budget import device_rules, plan
 from devices import fmt_time, is_number, load_config, local_tz, normalize, parse_model, parse_specification, scaled
-from rules import MIN, _alert_due, evaluate, voltage_bad, voltage_text
+from rules import MIN, _alert_due, evaluate, voltage_bad, voltage_in_outage, voltage_text
 
 
 def _service_to(store):
@@ -327,7 +327,7 @@ def run(store, api, cfg, notifier, uid, now=None):
                 spec.update(cfg.get("model_overrides", {}).get(f"{dev['category']}/{e['code']}", {}))
                 value = scaled(_num(e.get("value")), spec)
                 store.add_history(row["id"], e["code"], e["event_time"], value)
-                if "voltage" in e["code"] and is_number(value) and voltage_bad(value, cfg):
+                if "voltage" in e["code"] and is_number(value) and voltage_bad(value, cfg)                         and not voltage_in_outage(e["event_time"], meta, cfg):
                     if _alert_due(meta, f"volt:{row['id']}", now, cfg.get("voltage_alert_cooldown_min", 30) * MIN):
                         text = voltage_text(value, dev["name"], cfg)
                         notifier.send(f"{text} (о {fmt_time(e['event_time'], cfg)})", ts=e["event_time"], kind="voltage")

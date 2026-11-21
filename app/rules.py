@@ -93,6 +93,17 @@ def voltage_bad(v, cfg):
     return v > cfg.get("voltage_high", 248) or v < cfg.get("voltage_low", 200)
 
 
+def voltage_in_outage(ts, meta, cfg):
+    """Показ напруги під час відключення або за кілька хвилин до нього — це згасання мережі
+    (розетка встигає записати 150 В перед тим, як зникнути), а не проблема з напругою.
+    Журнал приходить із запізненням до 30 хв, тож дивимось і на поточне, і на останнє відключення."""
+    margin = cfg.get("voltage_outage_margin_min", 5) * MIN
+    cur, last = meta.get("outage"), meta.get("last_outage")
+    if cur and ts >= cur["start"] - margin:
+        return True
+    return bool(last and last["start"] - margin <= ts <= last["end"])
+
+
 def evaluate(prev_states, devices, meta, cfg, now):
     res = Result()
     meta = dict(meta or {})
@@ -152,8 +163,9 @@ def evaluate(prev_states, devices, meta, cfg, now):
         state["alarm"] = alarms
 
         if dev["online"]:
-            # --- напруга
-            for d in dev["dps"]:
+            # --- напруга (поки світла немає — не сповіщаємо: розетка може жити від станції/інвертора
+            #     або Tuya віддає залишкове значення; низька напруга тут — не проблема мережі)
+            for d in ([] if meta.get("outage") else dev["dps"]):
                 if "voltage" in d["code"] and d["unit"] == "V" and is_number(d["value"]):
                     v = d["value"]
                     if voltage_bad(v, cfg) and _alert_due(
