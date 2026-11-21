@@ -118,14 +118,16 @@ def run_digest(store, cfg, notifier, now, users, sent):
     if not rc.get("enabled", True):
         return None
     loc = _local(now, cfg)
-    if not rc.get("hour", 7) <= loc.hour < rc.get("until_hour", 10):
-        return None
+    window = rc.get("until_hour", 10) - rc.get("hour", 7)  # скільки годин після обраної ще можна дослати
     today = loc.strftime("%Y-%m-%d")
     done = sent.setdefault("digest", {})
     n = 0
     states = list(store.get_states().values())
     for uid, u in users.items():
         if u.get("status") != "approved" or not u.get("digest", True) or done.get(uid) == today:
+            continue
+        h = int(u.get("digest_hour", rc.get("hour", 7)))  # година — своя в кожного (⚙️ Налаштування)
+        if not h <= loc.hour < h + window:
             continue
         try:
             text = digest_text(store, cfg, u, now, states)

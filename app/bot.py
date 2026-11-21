@@ -245,8 +245,31 @@ def cmd_weather(c):
 DIGEST_BTN = "☀️ Ранковий підсумок"
 
 
-def digest_button(u):
-    return f"{DIGEST_BTN}: {'увімк.' if u.get('digest', True) else 'вимк.'}"
+DIGEST_HOURS = list(range(5, 13))  # з 05:00 до 12:00
+
+
+def digest_hour(u, cfg):
+    return int(u.get("digest_hour", (cfg.get("morning_digest") or {}).get("hour", 7)))
+
+
+def digest_button(u, cfg=None):
+    return f"{DIGEST_BTN}: {_hh(digest_hour(u, cfg or {})) if u.get('digest', True) else 'вимк.'}"
+
+
+def digest_view(u, cfg):
+    on = u.get("digest", True)
+    loud = sound_prefs(u).get("digest", False)
+    head = "☀️ Ранковий підсумок — погода зараз і на день, коли сьогодні буде світло."
+    state = (f"Приходить щодня о {_hh(digest_hour(u, cfg))}, {'🔔 зі звуком' if loud else '🔕 без звуку'} "
+             f"(звук — у «🔔 Звук»)." if on else "Зараз вимкнено.")
+    return "\n".join([head, state, "", "Оберіть годину або вимкніть."])
+
+
+def _digest_buttons(u, cfg):
+    on, h = u.get("digest", True), digest_hour(u, cfg)
+    btn = {("☀️ Увімкнути" if not on else "🚫 Вимкнути"): "toggle"}
+    btn.update({f"{'✅ ' if on and x == h else ''}{_hh(x)}": x for x in DIGEST_HOURS})
+    return btn
 
 
 @command("morning", "☀️ Ранковий підсумок зараз")
@@ -346,7 +369,8 @@ def _sound_buttons(u):
     loud_all = not (st["mute"] or n["on"])
     return {f"{'✅ ' if loud_all else ''}🔔 Увімкнути звук": "on", f"{'✅ ' if st['mute'] else ''}🔕 Вимкнути звук": "off",
             f"{'✅ ' if n['on'] else ''}🌙 Нічний {_hh(n['from'])}–{_hh(n['to'])}": "non", "☀️ Вимкнути нічний": "noff",
-            "🕐 Години нічного": "h"}
+            "🕐 Години нічного": "h",
+            f"☀️ Ранковий підсумок: {'🔔 зі звуком' if st.get('digest') else '🔕 без звуку'}": "dig"}
 
 
 def _user_buttons(users):
@@ -365,12 +389,16 @@ def menu_screen(u, users, cfg, screen, store=None):
     if screen == "alerts" or screen.startswith(("areg:", "acat")):
         return alerts_screen(store, u, cfg, screen)
     if screen == "settings":
-        rows = ([["📍 Моя адреса", "🔔 Звук"], [digest_button(u)]] + ([["👥 Користувачі"]] if u.get("role") == "owner" else [])
+        rows = ([["📍 Моя адреса", "🔔 Звук"], [digest_button(u, cfg)]] + ([["👥 Користувачі"]] if u.get("role") == "owner" else [])
                 + [[BACK]])
         return _kb(rows, "⚙️ Налаштування"), "⚙️ Налаштування"
     if screen == "sound":
         b = list(_sound_buttons(u))
-        return _kb([b[0:2], b[2:4], [b[4]], [BACK]], "🔔 Звук"), sound_view(u, cfg)[0]
+        return _kb([b[0:2], b[2:4], [b[4]], [b[5]], [BACK]], "🔔 Звук"), sound_view(u, cfg)[0]
+    if screen == "digest":
+        b = list(_digest_buttons(u, cfg))
+        hrs = b[1:]
+        return _kb([[b[0]]] + [hrs[i:i + 4] for i in range(0, len(hrs), 4)] + [[BACK]], "☀️ Ранковий підсумок"), digest_view(u, cfg)
     if screen in ("sound_from", "sound_to"):
         hrs = [_hh(h) for h in range(24)]
         rows = [hrs[i:i + 6] for i in range(0, 24, 6)] + [[BACK]]
@@ -391,7 +419,7 @@ def menu_screen(u, users, cfg, screen, store=None):
     return None, None
 
 
-MENU_PARENT = {"settings": None, "sound": "settings", "sound_from": "sound", "sound_to": "sound_from", "users": "settings",
+MENU_PARENT = {"settings": None, "sound": "settings", "digest": "settings", "sound_from": "sound", "sound_to": "sound_from", "users": "settings",
                "alerts": None, "acat": "alerts"}
 
 
@@ -554,10 +582,7 @@ def handle_menu(store, cfg, notifier, users, uid, text, msg_id, web):
             return _goto(store, notifier, cfg, uid, "alerts", msg_id, users, "⚠️ Довідник регіонів зараз недоступний")
     if screen == "settings":
         if text.startswith(DIGEST_BTN):
-            u["digest"] = not u.get("digest", True)
-            note = ("☀️ Ранковий підсумок увімкнено: щодня о 7:00 — погода й коли буде світло." if u["digest"]
-                    else "☀️ Ранковий підсумок вимкнено.")
-            return _goto(store, notifier, cfg, uid, "settings", msg_id, users, note)
+            return _goto(store, notifier, cfg, uid, "digest", msg_id, users)
         if text == "🔔 Звук":
             return _goto(store, notifier, cfg, uid, "sound", msg_id, users)
         if text == "👥 Користувачі" and u.get("role") == "owner":
@@ -569,10 +594,26 @@ def handle_menu(store, cfg, notifier, users, uid, text, msg_id, web):
                 notifier.call("deleteMessage", {"chat_id": uid, "message_id": msg_id}, retries=0)
             return address_start(store, notifier, users, uid)
         return None
+    if screen == "digest":
+        op = _digest_buttons(u, cfg).get(text)
+        if op is None:
+            return None
+        if op == "toggle":
+            u["digest"] = not u.get("digest", True)
+            note = "☀️ Увімкнено." if u["digest"] else "☀️ Ранковий підсумок вимкнено."
+        else:
+            u["digest"], u["digest_hour"] = True, op
+            note = f"☀️ Тепер щодня о {_hh(op)}."
+        return _goto(store, notifier, cfg, uid, "digest", msg_id, users, note)
     if screen == "sound":
         op = _sound_buttons(u).get(text)
         if not op:
             return None
+        if op == "dig":
+            st = sound_prefs(u)
+            st["digest"] = not st.get("digest", False)
+            u["sound"] = st
+            return _goto(store, notifier, cfg, uid, "sound", msg_id, users)
         if op == "h":
             return _goto(store, notifier, cfg, uid, "sound_from", msg_id, users)
         st = sound_prefs(u)
@@ -1008,7 +1049,9 @@ def _in_night(s, hour):
 def is_silent(u, kind, hour):
     """True — повідомлення прийде без звуку."""
     s = sound_prefs(u)
-    return bool(s["mute"]) or _in_night(s, hour)  # kind не враховуємо: на все однаково
+    if kind == "digest":  # ранковий підсумок — за замовчуванням без звуку; «зі звуком» — лише якщо звук не вимкнено зовсім
+        return not s.get("digest", False) or bool(s["mute"])
+    return bool(s["mute"]) or _in_night(s, hour)
 
 
 def silencer(store, cfg):
@@ -1035,6 +1078,7 @@ def sound_view(u, cfg):
                           if now_quiet else "🔔 зі звуком")]
     if n["on"]:
         lines.append(f"🌙 Нічний режим: щодня {_hh(n['from'])}–{_hh(n['to'])} без звуку.")
+    lines.append(f"☀️ Ранковий підсумок: {'🔔 зі звуком' if s.get('digest') else '🔕 без звуку'}.")
     # «Увімкнути звук» перебиває все (і нічний режим); «Вимкнути звук» — тиша до «Увімкнути звук»
     loud_all = not (s["mute"] or n["on"])
     rows = [[{"text": f"{'✅ ' if loud_all else ''}🔔 Увімкнути звук", "callback_data": "snd:on"},
