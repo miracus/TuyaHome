@@ -719,7 +719,8 @@ function histControls() {
     custom: `<input type="date" id="h-from" value="${iso(new Date(t - 6 * 864e5))}" max="${iso(t)}"> — <input type="date" id="h-to" value="${iso(t)}" max="${iso(t)}">`,
   };
   return `<div class="sec-head"><h2>Історія</h2><span id="h-extra"></span>
-    <span class="seg" id="h-kind">${[["power", "💡 Світло"], ["weather", "🌤 Погода"], ["alerts", "🚨 Тривоги"]].map(([k, l]) => `<button data-k="${k}" class="${k === HIST.kind ? "on" : ""}">${l}</button>`).join("")}</span></div>
+    <span class="seg" id="h-kind">${[["power", "💡 Світло"], ["weather", "🌤 Погода"], ["alerts", "🚨 Тривоги"],
+      ...(document.getElementById("vac-tab").hidden ? [] : [["vacuum", "🤖 Пилосос"]])].map(([k, l]) => `<button data-k="${k}" class="${k === HIST.kind ? "on" : ""}">${l}</button>`).join("")}</span></div>
     <div class="hctl"><span class="seg" id="h-period">${[["day", "День"], ["month", "Місяць"], ["year", "Рік"], ["custom", "Свій"]].map(([k, l]) =>
       `<button data-p="${k}" class="${k === HIST.period ? "on" : ""}">${l}</button>`).join("")}</span>
     ${Object.entries(inputs).map(([k, h]) => `<span class="hin" data-p="${k}" ${k === HIST.period ? "" : "hidden"}>${h}</span>`).join("")}</div>
@@ -767,7 +768,8 @@ function renderHistory() {
   if (!days.length) { body.innerHTML = `<span class="muted">Немає даних за цей період</span>`; return; }
   document.getElementById("hist").classList.remove("rankview");
   document.getElementById("h-extra").innerHTML = "";  // перемикач «Мої регіони / Рейтинг» — лише для тривог
-  body.innerHTML = HIST.kind === "power" ? histPower(D, days) : HIST.kind === "alerts" ? histAlerts(D, days) : histWeather(D, days);
+  body.innerHTML = HIST.kind === "power" ? histPower(D, days) : HIST.kind === "alerts" ? histAlerts(D, days)
+    : HIST.kind === "vacuum" ? histVacuum(D, days) : histWeather(D, days);
 }
 
 function histPower(D, days) {
@@ -800,6 +802,34 @@ function histPower(D, days) {
       ${[0, .5, 1].map(f => `<line x1="0" x2="${W}" y1="${y(top * f)}" y2="${y(top * f)}" stroke="var(--grid)" vector-effect="non-scaling-stroke"/>`).join("")}${bars}</svg>
       <span class="rng">${Math.round(top)} год</span></div>${histAxis(days)}
     <div class="legend"><span><i class="off" style="opacity:.45"></i>за графіком ДТЕК</span><span><i class="maybe"></i>можливе</span><span><i style="background:var(--bad)"></i>факт без світла</span></div>`;
+}
+
+// 🤖 пилосос в історії: прибирання з архіву (хмара Dreame → ARCH#vacuum) — площа по днях і список
+const VAC_KIND = {segment_cleaning: "кімнати", cleaning: "увесь дім", zone_cleaning: "зона", spot_cleaning: "точка",
+  customized_cleaning: "свої налаштування", cruising_path: "патруль", cruising_point: "патруль"};
+function histVacuum(D, days) {
+  const R = (D.vacuum || []).slice().sort((a, b) => a.ts - b.ts);
+  if (!R.length) return `<span class="muted">За цей період прибирань немає</span>`;
+  const area = R.reduce((a, r) => a + (r.area || 0), 0), mins = R.reduce((a, r) => a + (r.minutes || 0), 0);
+  const broken = R.filter(r => r.completed === false).length;
+  const head = `<div class="hsum">
+    <div><small>Прибирань</small><b>${R.length}</b><span>${broken ? `з них перервано ${broken}` : "усі завершено"}</span></div>
+    <div><small>Прибрано</small><b>${area} м²</b><span>у середньому ${Math.round(area / Math.max(1, R.length - broken))} м² за раз</span></div>
+    <div><small>Час роботи</small><b>${hfmt(mins / 60)}</b><span>за ${days.length} дн.</span></div></div>`;
+  const per = days.map((d, i) => { const d1 = i + 1 < days.length ? days[i + 1].day : d.day + 864e5;
+    const rs = R.filter(r => r.ts >= d.day && r.ts < d1); return {day: d.day, area: rs.reduce((a, r) => a + (r.area || 0), 0), n: rs.length, mins: rs.reduce((a, r) => a + (r.minutes || 0), 0)}; });
+  const W = 1000, Hh = 150, top = Math.max(10, ...per.map(p => p.area)), bw = W / per.length, y = v => Hh - v / top * (Hh - 10);
+  const chart = days.length > 1 ? `<div class="hchart"><svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">
+      ${[0, .5, 1].map(f => `<line x1="0" x2="${W}" y1="${y(top * f)}" y2="${y(top * f)}" stroke="var(--grid)" vector-effect="non-scaling-stroke"/>`).join("")}
+      ${per.map((p, i) => p.n ? `<rect x="${i * bw + bw * .15}" y="${y(p.area)}" width="${bw * .7}" height="${Math.max(2, Hh - y(p.area))}" fill="var(--accent)" rx="2">
+        <title>${dayLabel(p.day)} · ${p.n} прибир. · ${p.area} м² · ${p.mins} хв</title></rect>` : "").join("")}</svg>
+      <span class="rng">${top} м²</span></div>${histAxis(days)}
+    <div class="legend"><span><i style="background:var(--accent)"></i>прибрано за день, м²</span></div>` : "";
+  const list = `<h3 class="small muted" style="margin-top:12px">Прибирання</h3><div class="vhist">${R.slice().reverse().slice(0, 60).map(r =>
+    `<div><span>${fmtT(r.ts, 1)}</span><span>${r.area != null ? `${r.area} м²` : ""}</span><span>${r.minutes != null ? `${r.minutes} хв` : ""}</span>
+     <span class="${r.completed === false ? "bad" : ""}">${r.completed === false ? `перервано${r.interrupt ? ` (${esc(r.interrupt.replace(/_/g, " "))})` : ""}`
+       : `✅ ${esc(VAC_KIND[r.kind] || "")}${r.mop_after ? " · потім миття" : ""}`}</span></div>`).join("")}</div>`;
+  return head + chart + list;
 }
 
 function histAxis(days) {

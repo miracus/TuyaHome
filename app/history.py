@@ -148,6 +148,9 @@ def build(store, cfg, d_from, d_to, regions=None):
            "monitor_since": monitor_since, "weather_fields": ["ts"] + weather.HOURLY,
            "sensor_name": sensor and sensor["name"]}
     res["alert_regions"] = region_names
+    # пилосос: архів прибирань (ARCH#vacuum, ключ — час початку), лише якщо пилосос підключено
+    if store.get_meta("vacuum"):
+        res["vacuum"] = [r for r in store.list_archive_range("vacuum", f"{lo:013d}", f"{hi:013d}") if r.get("ts")]
     if detail:
         res["off"], res["unknown"] = off, unknown
         res["alert_segments"] = alerts

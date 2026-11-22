@@ -122,6 +122,43 @@ def _g(fn):
         return None
 
 
+def hist_record(h):
+    """Запис історії прибирань Dreame (CleaningHistory) → dict для бази й дашборда."""
+    def nm(v):
+        return (getattr(v, "name", "") or "").lower() or None
+    return {"ts": int(h.date.timestamp() * 1000) if getattr(h, "date", None) else None,
+            "minutes": getattr(h, "cleaning_time", None), "area": getattr(h, "cleaned_area", None),
+            "completed": getattr(h, "completed", None), "kind": nm(getattr(h, "status", None)),
+            "suction": nm(getattr(h, "suction_level", None)), "interrupt": nm(getattr(h, "task_interrupt_reason", None)),
+            "method": nm(getattr(h, "cleanup_method", None)), "mop_after": bool(getattr(h, "mop_after_sweep", None))}
+
+
+def archive_history(store, records, since=0):
+    """Історія в хмарі Dreame — лише останні записи, тож для графіків за місяці/рік кладемо кожен запис
+    в архів (ARCH#vacuum, ключ — час початку; повторний запис того самого просто перезаписує)."""
+    n = 0
+    for r in records:
+        if r.get("ts") and r["ts"] >= since:
+            store.put_archive("vacuum", f"{int(r['ts']):013d}", r)
+            n += 1
+    return n
+
+
+def backfill(dev, store, limit=500):
+    """Разово: уся доступна історія з хмари (бібліотека сама бере лише 30)."""
+    from dreame.types import DIID, CleaningHistory, DreameVacuumProperty as P
+    start = _g(lambda: dev.get_property(P.FIRST_CLEANING_DATE)) or 0
+    res = dev._protocol.cloud.get_device_event(DIID(P.STATUS, dev.property_mapping), limit, start) or []
+    recs = []
+    for data in res:
+        try:
+            recs.append(hist_record(CleaningHistory(json.loads(data["history"] if "history" in data else data["value"]),
+                                                    dev.property_mapping)))
+        except Exception as e:
+            print(f"[vacuum] backfill record: {type(e).__name__}: {e}")
+    return archive_history(store, recs), len(res)
+
+
 def collect(dev, cfg, prev=None):
     """Стан пилососа → META vacuum (бот + дашборд)."""
     from dreame.types import DreameVacuumProperty as P
@@ -137,17 +174,9 @@ def collect(dev, cfg, prev=None):
     station = {k: _g(lambda k=k: getattr(st, f"{k}_status_name")) for k in
                ("dust_bag", "clean_water_tank", "dirty_water_tank")}
     history = []
-    for h in (_g(lambda: st._cleaning_history) or [])[:30]:  # історію зберігає хмара Dreame — не дублюємо її в себе
+    for h in (_g(lambda: st._cleaning_history) or [])[:30]:
         try:
-            history.append({
-                "ts": int(h.date.timestamp() * 1000) if getattr(h, "date", None) else None,
-                "minutes": getattr(h, "cleaning_time", None), "area": getattr(h, "cleaned_area", None),
-                "completed": getattr(h, "completed", None),
-                "kind": (getattr(getattr(h, "status", None), "name", "") or "").lower() or None,
-                "suction": (getattr(getattr(h, "suction_level", None), "name", "") or "").lower() or None,
-                "interrupt": (getattr(getattr(h, "task_interrupt_reason", None), "name", "") or "").lower() or None,
-                "mop_after": bool(getattr(h, "mop_after_sweep", None)),
-            })
+            history.append(hist_record(h))
         except Exception as e:
             print(f"[vacuum] history: {type(e).__name__}: {e}")
     return {
@@ -283,6 +312,12 @@ def run(event, store, cfg):
         meta = collect(dev, cfg, prev)
         firmware_watch(store, meta, prev.get("fw"))
         result = {"op": op}
+        new_hist = [h for h in meta.get("history") or [] if (h.get("ts") or 0) >= (prev.get("hist_arch") or 0) - 86_400_000]
+        if new_hist:  # останні записи (+ доба назад: свіжий запис міг дописатись після прибирання)
+            result["archived"] = archive_history(store, new_hist)
+            meta["hist_arch"] = max(h["ts"] for h in new_hist if h.get("ts"))
+        if op == "backfill":
+            result["archived"], result["cloud_records"] = backfill(dev, store, int(event.get("limit") or 500))
 
         if op == "clean":
             ids = [int(i) for i in event.get("rooms") or []]
