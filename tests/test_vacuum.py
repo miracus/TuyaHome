@@ -77,6 +77,26 @@ class Wizard(unittest.TestCase):
         _, view, note = vb.step(d, "rn", ROOMS)
         self.assertIsNone(view)
 
+    def test_back_steps(self):
+        d, _, _ = vb.step(None, "k:sel", ROOMS)
+        for x in ("r:1", "rn", "t:2", "m:mop"):
+            d, _, _ = vb.step(d, x, ROOMS)
+        d, view, _ = vb.step(d, "b", ROOMS)          # підтвердження → режим
+        self.assertIn("Режим?", view[0])
+        d, view, _ = vb.step(d, "b", ROOMS)          # режим → скільки разів
+        self.assertIn("Скільки разів", view[0])
+        d, view, _ = vb.step(d, "b", ROOMS)          # → кімнати (позначки збережено)
+        self.assertIn("✅ Кухня", str(view[1]))
+        d, view, note = vb.step(d, "b", ROOMS)       # → головне меню
+        self.assertEqual((view, note), (None, "main"))
+
+    def test_main_menu_depends_on_state(self):
+        docked = vb.main_markup({"state": "charging_completed", "docked": True})
+        self.assertEqual(docked["inline_keyboard"][0][0]["text"], "🏠 Усі кімнати")
+        self.assertNotIn("На базу", str(docked))
+        cleaning = vb.main_markup({"state": "sweeping", "docked": False, "active": {"rooms": [1]}})
+        self.assertIn("На базу", cleaning["inline_keyboard"][0][0]["text"])
+
     def test_times_clamped(self):
         d, _, _ = vb.step(None, "k:all", ROOMS)
         d, _, _ = vb.step(d, "t:9", ROOMS)

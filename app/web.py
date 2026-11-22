@@ -56,17 +56,19 @@ def static_file(path):
 def _vacuum_refresh(store, op, every_min):
     """Дашборд відкрили, а дані пилососа застарілі — попросити Lambda пилососа оновити (не частіше every_min)."""
     if not os.environ.get("VACUUM_FN"):
-        return
+        return False
     now = int(time.time() * 1000)
     t = store.get_meta("vacuum_tick") or {}
     if now - t.get(f"web_{op}", 0) < every_min * 60_000:
-        return
+        return False
     store.put_meta("vacuum_tick", {**t, f"web_{op}": now})
     try:
         import vacuum_bot
         vacuum_bot.invoke({"op": op})
+        return True
     except Exception as e:
         print(f"[web] vacuum {op}: {type(e).__name__}: {e}")
+        return False
 
 
 def vacuum_state(store, cfg, live=False):
@@ -167,6 +169,9 @@ def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
         return _resp(200, vacuum_state(store, cfg, live=qs.get("live") == "1"))
     if path == "/api/vacuum/map":
         return vacuum_map(store)
+    if path == "/api/vacuum/map/refresh" and method == "POST":  # натиснули на карту — свіжа (не частіше ніж раз на 1 хв)
+        print(f"vacuum map refresh by {user}")
+        return _resp(200, {"started": _vacuum_refresh(store, "map", 1)})
 
     if path == "/api/state":
         states = [s for s in store.get_states().values() if not s.get("missing")]

@@ -122,19 +122,39 @@ def _btn(text, data):
     return {"text": text, "callback_data": f"vc:{data}"}
 
 
-def main_markup():
-    return {"inline_keyboard": [
-        [_btn(KINDS["all"], "k:all"), _btn(KINDS["ex"], "k:ex")],
-        [_btn(KINDS["sel"], "k:sel")],
-        [_btn("⏏️ На базу", "home"), _btn("🗺 Карта", "map")],
-        [_btn("🔄 Оновити", "st")],
-    ]}
+MODE_SHORT = {"sweep": "🧹 Пилосос", "mop": "🧽 Миття", "both": "🧹+🧽 Разом", "after": "🧹→🧽 Потім миття"}
+NAV = "‹ Назад", "✖️ Скасувати"
+
+
+def busy(meta):
+    """Пилосос зараз чимось зайнятий (прибирає, їде) — тоді головне — «На базу»."""
+    meta = meta or {}
+    return bool(meta.get("active")) or (bool(meta.get("state")) and meta["state"] not in DOCKED_STATES)
+
+
+def main_markup(meta=None):
+    """Головне меню під станом. Прибирає — зверху велика «⏏️ На базу»; стоїть на базі — запуск прибирання.
+    Найчастіша дія — на всю ширину, «На базу» (коли не на базі) — окремим рядком унизу, під великим пальцем."""
+    info = [_btn("🗺 Карта", "map"), _btn("🔄 Оновити", "st")]
+    if busy(meta):
+        return {"inline_keyboard": [[_btn("⏏️ На базу — негайно", "home")], info,
+                                    [_btn(KINDS["all"], "k:all")]]}
+    rows = [[_btn(KINDS["all"], "k:all")],
+            [_btn("✅ Вибрані", "k:sel"), _btn("➖ Усі, крім…", "k:ex")],
+            info]
+    if meta is None or not meta.get("docked", True):
+        rows.append([_btn("⏏️ На базу", "home")])
+    return {"inline_keyboard": rows}
+
+
+def _nav():
+    return [_btn(NAV[0], "b"), _btn(NAV[1], "x")]
 
 
 def rooms_view(draft, rooms):
     marked = set(draft.get("rooms") or [])
-    head = ("Які кімнати ПРОПУСТИТИ? Решту буде прибрано." if draft["kind"] == "ex"
-            else "Які кімнати прибрати?")
+    head = ("Позначте кімнати, які ПРОПУСТИТИ — решту буде прибрано." if draft["kind"] == "ex"
+            else "Позначте кімнати, які прибрати.")
     rows, row = [], []
     for r in rooms:
         row.append(_btn(("✅ " if r["id"] in marked else "☐ ") + r["name"], f"r:{r['id']}"))
@@ -143,42 +163,65 @@ def rooms_view(draft, rooms):
             row = []
     if row:
         rows.append(row)
-    rows.append([_btn("Далі ➡️", "rn"), _btn("‹ Скасувати", "x")])
+    n = len(plan_ids(draft, rooms))
+    rows.append([_btn(f"Далі ➡️ ({n} {_rooms_word(n)})" if n else "Далі ➡️", "rn")])
+    rows.append(_nav())
     return f"🤖 {KINDS[draft['kind']]}\n{head}", {"inline_keyboard": rows}
+
+
+def _rooms_word(n):
+    return "кімната" if n % 10 == 1 and n % 100 != 11 else "кімнати" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else "кімнат"
 
 
 def times_view(draft, rooms):
     ids = plan_ids(draft, rooms)
     return (f"🤖 Кімнати: {names(ids, rooms)}\nСкільки разів пройти кожну?",
-            {"inline_keyboard": [[_btn(f"{n}×", f"t:{n}") for n in range(1, MAX_TIMES + 1)],
-                                 [_btn("‹ Скасувати", "x")]]})
+            {"inline_keyboard": [[_btn(f"{n}×", f"t:{n}") for n in range(1, MAX_TIMES + 1)], _nav()]})
 
 
 def mode_view(draft, rooms):
     ids = plan_ids(draft, rooms)
-    keys = list(MODES)
+    k = list(MODES)
     return (f"🤖 Кімнати: {names(ids, rooms)} · {draft['times']}×\nРежим?",
-            {"inline_keyboard": [[_btn(MODES[k][1], f"m:{k}")] for k in keys] + [[_btn("‹ Скасувати", "x")]]})
+            {"inline_keyboard": [[_btn(MODE_SHORT[k[0]], f"m:{k[0]}"), _btn(MODE_SHORT[k[1]], f"m:{k[1]}")],
+                                 [_btn(MODE_SHORT[k[2]], f"m:{k[2]}"), _btn(MODE_SHORT[k[3]], f"m:{k[3]}")],
+                                 _nav()]})
 
 
 def confirm_view(draft, rooms):
     ids = plan_ids(draft, rooms)
     return (f"🤖 Прибрати: {names(ids, rooms)}\n🔁 {draft['times']}× · {mode_label(draft['mode'])}\n\nПочати?",
-            {"inline_keyboard": [[_btn("▶️ Почати", "go"), _btn("‹ Скасувати", "x")]]})
+            {"inline_keyboard": [[_btn("▶️ Почати", "go")], _nav()]})
 
 
 def step(draft, data, rooms):
-    """Один крок майстра: (нова чернетка, екран) або (чернетка, None, підказка) — без побічних ефектів."""
+    """Один крок майстра: (нова чернетка, екран, підказка). Екран None — лишитись (або, з підказкою «main», —
+    повернутись у головне меню). Без побічних ефектів."""
     op, _, arg = data.partition(":")
     draft = dict(draft or {})
     if op == "k" and arg in KINDS:
         draft = {"kind": arg, "rooms": []}
         if arg == "all":
-            draft["times"] = None
+            draft["stage"] = "times"
             return draft, times_view(draft, rooms), ""
+        draft["stage"] = "rooms"
         return draft, rooms_view(draft, rooms), ""
     if not draft.get("kind"):
         return {}, None, "Почніть спочатку"
+    if op == "b":  # назад на крок
+        stage = draft.get("stage")
+        if stage == "confirm":
+            draft.pop("mode", None)
+            draft["stage"] = "mode"
+            return draft, mode_view(draft, rooms), ""
+        if stage == "mode":
+            draft.pop("times", None)
+            draft["stage"] = "times"
+            return draft, times_view(draft, rooms), ""
+        if stage == "times" and draft["kind"] != "all":
+            draft["stage"] = "rooms"
+            return draft, rooms_view(draft, rooms), ""
+        return {}, None, "main"
     if op == "r":
         rid = int(arg)
         marked = list(draft.get("rooms") or [])
@@ -189,12 +232,15 @@ def step(draft, data, rooms):
         if not plan_ids(draft, rooms):
             return draft, None, ("Позначте хоча б одну кімнату" if draft["kind"] == "sel"
                                  else "Не можна пропустити всі кімнати")
+        draft["stage"] = "times"
         return draft, times_view(draft, rooms), ""
     if op == "t":
         draft["times"] = max(1, min(MAX_TIMES, int(arg)))
+        draft["stage"] = "mode"
         return draft, mode_view(draft, rooms), ""
     if op == "m" and arg in MODES and draft.get("times"):
         draft["mode"] = arg
+        draft["stage"] = "confirm"
         return draft, confirm_view(draft, rooms), ""
     return draft, None, "Почніть спочатку"
 
@@ -221,7 +267,7 @@ def open_menu(store, cfg, notifier, uid):
             invoke({"op": "status", "chat": uid})
         return "vacuum not ready"
     ok, resp = notifier.call("sendMessage", {"chat_id": uid, "text": status_text(meta, cfg) + "\n⏳ Оновлюю стан…",
-                                             "reply_markup": main_markup()}, retries=0)
+                                             "reply_markup": main_markup(meta)}, retries=0)
     msg_id = ((resp or {}).get("result") or {}).get("message_id") if ok else None
     try:
         invoke({"op": "status", "chat": uid, "msg": msg_id})
@@ -263,7 +309,7 @@ def handle_callback(cb, store, cfg, notifier, users):
 
     if data == "st":
         answer("Оновлюю…")
-        edit(status_text(meta, cfg) + "\n⏳ Оновлюю стан…", main_markup())
+        edit(status_text(meta, cfg) + "\n⏳ Оновлюю стан…", main_markup(meta))
         invoke({"op": "status", "chat": uid, "msg": msg_id})
         return "vacuum status"
     if data == "home":
@@ -279,7 +325,7 @@ def handle_callback(cb, store, cfg, notifier, users):
         drafts.pop(uid, None)
         store.put_meta("vacuum_draft", drafts)
         answer()
-        edit(status_text(meta, cfg), main_markup())
+        edit(status_text(meta, cfg), main_markup(meta))
         return "vacuum cancel"
     if data == "go":
         d = drafts.pop(uid, None) or {}
@@ -287,7 +333,7 @@ def handle_callback(cb, store, cfg, notifier, users):
         ids = plan_ids(d, rooms)
         if not ids or not d.get("times") or d.get("mode") not in MODES:
             answer("Почніть спочатку")
-            edit(status_text(meta, cfg), main_markup())
+            edit(status_text(meta, cfg), main_markup(meta))
             return "vacuum go invalid"
         answer("Запускаю")
         edit(f"⏳ Запускаю прибирання: {names(ids, rooms)} · {d['times']}× · {mode_label(d['mode'])}…")
@@ -298,6 +344,12 @@ def handle_callback(cb, store, cfg, notifier, users):
         answer("Кімнати ще не завантажено — натисніть 🔄 Оновити")
         return "vacuum no rooms"
     draft, view, note = step(drafts.get(uid), data, rooms)
+    if note == "main":  # «Назад» з першого кроку — у головне меню
+        drafts.pop(uid, None)
+        store.put_meta("vacuum_draft", drafts)
+        answer()
+        edit(status_text(meta, cfg), main_markup(meta))
+        return "vacuum back"
     drafts[uid] = draft
     store.put_meta("vacuum_draft", drafts)
     answer(note)
@@ -320,7 +372,7 @@ def tick(store, cfg, now):
     t = store.get_meta("vacuum_tick") or {}
     hour = datetime.fromtimestamp(now / 1000, local_tz(cfg)).hour
     if now - t.get("check", 0) > 20 * 3600_000 and hour == vcfg.get("check_hour", 4):
-        store.put_meta("vacuum_tick", {"check": now})
+        store.put_meta("vacuum_tick", {**t, "check": now})
         invoke({"op": "check"})
         return "check"
     return None

@@ -136,8 +136,23 @@ def collect(dev, cfg, prev=None):
             ("main_brush", "side_brush", "filter", "sensor_dirty", "mop", "detergent", "squeegee", "tank_filter")}
     station = {k: _g(lambda k=k: getattr(st, f"{k}_status_name")) for k in
                ("dust_bag", "clean_water_tank", "dirty_water_tank")}
+    history = []
+    for h in (_g(lambda: st._cleaning_history) or [])[:30]:  # історію зберігає хмара Dreame — не дублюємо її в себе
+        try:
+            history.append({
+                "ts": int(h.date.timestamp() * 1000) if getattr(h, "date", None) else None,
+                "minutes": getattr(h, "cleaning_time", None), "area": getattr(h, "cleaned_area", None),
+                "completed": getattr(h, "completed", None),
+                "kind": (getattr(getattr(h, "status", None), "name", "") or "").lower() or None,
+                "suction": (getattr(getattr(h, "suction_level", None), "name", "") or "").lower() or None,
+                "interrupt": (getattr(getattr(h, "task_interrupt_reason", None), "name", "") or "").lower() or None,
+                "mop_after": bool(getattr(h, "mop_after_sweep", None)),
+            })
+        except Exception as e:
+            print(f"[vacuum] history: {type(e).__name__}: {e}")
     return {
         **prev,
+        "history": history or prev.get("history") or [],
         "name": prev.get("name") or _g(lambda: dev.name),
         "model": _g(lambda: dev.info.model),
         "fw": _g(lambda: dev.info.firmware_version),
@@ -258,7 +273,7 @@ def run(event, store, cfg):
         return {"op": op, "skip": "not active"}
     lock = acquire_lock()
     if not lock:
-        edit(chat, msg, "⏳ Пилосос зайнятий іншою командою — спробуйте за хвилину.", vb.main_markup())
+        edit(chat, msg, "⏳ Пилосос зайнятий іншою командою — спробуйте за хвилину.", vb.main_markup(prev))
         return {"op": op, "error": "locked"}
     dev = None
     try:
@@ -294,7 +309,7 @@ def run(event, store, cfg):
                               "by": event.get("by"), "started": _now(), "seen_running": False}
             meta["state"] = "sweeping" if mode != "mop" else "mopping"
             edit(chat, msg, f"▶️ {meta.get('name', 'Пилосос')} почав прибирання: {rooms_text} · {times}× · "
-                            f"{vb.mode_label(mode)}{note}\nСповіщу, коли закінчить.", vb.main_markup())
+                            f"{vb.mode_label(mode)}{note}\nСповіщу, коли закінчить.", vb.main_markup(meta))
             others = [c for c in home_chats(store) if str(c) != str(chat)]
             tell(others, f"🤖 {event.get('by') or 'Хтось'} запустив прибирання: {rooms_text} · {times}× · "
                          f"{vb.mode_label(mode)}")
@@ -306,7 +321,7 @@ def run(event, store, cfg):
             meta["state"] = "returning"
             if meta.get("active"):
                 meta["active"]["stopped_by"] = event.get("by")
-            edit(chat, msg, f"⏏️ {meta.get('name', 'Пилосос')} їде на базу.", vb.main_markup())
+            edit(chat, msg, f"⏏️ {meta.get('name', 'Пилосос')} їде на базу.", vb.main_markup(meta))
         elif op == "map":
             png = render_map(dev, cfg)
             if png:
@@ -322,6 +337,9 @@ def run(event, store, cfg):
             age_min = (_now() - act.get("started", _now())) / 60000
             finished = (act["seen_running"] and meta["state"] in vb.DOCKED_STATES and not meta["running"]) or age_min > 240
             if finished:
+                h0 = (meta.get("history") or [{}])[0]
+                if h0.get("ts") and h0["ts"] >= act.get("started", 0) - 120_000:  # запис саме цього прибирання
+                    meta["area"], meta["minutes"] = h0.get("area") or meta.get("area"), h0.get("minutes") or meta.get("minutes")
                 done = (f"✅ {meta.get('name', 'Пилосос')} закінчив: {act.get('rooms_text', '')}"
                         + (f" · {meta['area']} м²" if meta.get("area") else "")
                         + (f" за {meta['minutes']} хв" if meta.get("minutes") else "")
@@ -344,7 +362,7 @@ def run(event, store, cfg):
             except Exception as e:
                 print(f"[vacuum] map: {type(e).__name__}: {e}")
         if op == "status":
-            edit(chat, msg, vb.status_text(meta, cfg), vb.main_markup())
+            edit(chat, msg, vb.status_text(meta, cfg), vb.main_markup(meta))
         meta.pop("lost", None)
         meta.pop("fail", None)
         keep_token(sec, dev._protocol.cloud)
@@ -364,7 +382,7 @@ def run(event, store, cfg):
         traceback.print_exc()
         what = {"clean": "прибирання", "home": "«На базу»", "map": "карта", "status": "стан",
                 "watch": "стеження за прибиранням", "check": "щоденна перевірка"}.get(op, op)
-        edit(chat, msg, f"⚠️ Не вдалося ({what}): {type(e).__name__}: {str(e)[:150]}", vb.main_markup())
+        edit(chat, msg, f"⚠️ Не вдалося ({what}): {type(e).__name__}: {str(e)[:150]}", vb.main_markup(prev))
         # власнику — раз на 6 год: протокол неофіційний, збій команди = привід перевірити функції
         if _now() - (prev.get("fail") or {}).get("told", 0) > 6 * 3600_000:
             tell(owner_chats(store), f"⚠️ Пилосос: {what} — збій {type(e).__name__}: {str(e)[:150]}. "

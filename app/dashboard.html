@@ -75,7 +75,12 @@ body[data-top="vacuum"] #sched,body[data-top="vacuum"] #weather,body[data-top="v
 #vac{margin-bottom:12px}
 .vgrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px}
 @media (max-width:760px){.vgrid{grid-template-columns:1fr}}
-.vmap{width:100%;border-radius:12px;border:1px solid var(--line);background:var(--bg)}
+.vmap{width:100%;border-radius:12px;border:1px solid var(--line);background:var(--bg);display:block}
+.vmapbox{position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.vmapbox .vov{position:absolute;inset:0;display:none;align-items:center;justify-content:center;gap:10px;border-radius:12px;
+  background:color-mix(in srgb,var(--bg) 70%,transparent);font-weight:600}
+.vmapbox.busy .vov{display:flex}.vmapbox .vov .spin{width:22px;height:22px;border-width:3px}
+.vmapbox .vnomap{border:1px dashed var(--line);border-radius:12px;padding:40px 12px;text-align:center}
 .vbars{display:grid;gap:7px;margin:4px 0 10px}
 .vbar{display:grid;grid-template-columns:130px 1fr 44px;align-items:center;gap:8px;font-size:13px}
 .vbar i{display:block;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
@@ -83,6 +88,8 @@ body[data-top="vacuum"] #sched,body[data-top="vacuum"] #weather,body[data-top="v
 .vbar i b.mid{background:#f59e0b}.vbar i b.low{background:var(--bad,#dc2626)}
 .vbar span:last-child{text-align:right;color:var(--muted)}
 .vrooms{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}.vrooms span{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px}
+.vhist{display:grid;gap:3px;margin:4px 0 10px;font-size:13px}.vhist div{display:grid;grid-template-columns:1.4fr .8fr .7fr 1fr;gap:6px;border-bottom:1px solid var(--line);padding:3px 0}
+.vhist .bad{color:var(--bad,#dc2626)}
 .vrooms span.on{border-color:var(--accent);color:var(--accent);font-weight:600}
 body[data-top="game"] #sched,body[data-top="game"] #weather,body[data-top="game"] #game ~ *{display:none}
 /* гра «Пляшечки» */
@@ -356,7 +363,7 @@ ul.list li.dim{color:var(--muted)}
   <div id="err" class="err"></div>
 
   <!-- над графіками: перемикач «Світло» (графік ДТЕК + факт) / «Погода» (прогноз + датчик); за замовчуванням — світло -->
-  <div class="toptabs"><span class="seg" id="toptabs"><button data-t="power" class="on">💡 Світло</button><button data-t="weather">🌤 Погода</button><button data-t="history">📜 Історія</button><button data-t="game">🎮 Гра</button><button data-t="vacuum" id="vac-tab" hidden>🤖 Пилосос</button></span></div>
+  <div class="toptabs"><span class="seg" id="toptabs"><button data-t="power" class="on">💡 Світло</button><button data-t="weather">🌤 Погода</button><button data-t="vacuum" id="vac-tab" hidden>🤖 Пилосос</button><button data-t="history">📜 Історія</button><button data-t="game">🎮 Гра</button></span></div>
   <section class="card" id="sched" hidden></section>
   <section class="card" id="weather" hidden></section>
   <section class="card" id="hist"></section>
@@ -571,17 +578,44 @@ async function renderVacuum() {
       ${V.error ? tile("⚠️", "Помилка", esc(String(V.error).replace(/_/g, " ")), "") : ""}
     </div>
     <div class="vgrid">
-      <div>${V.map_ts ? `<img class="vmap" alt="Карта" src="/api/vacuum/map?${new URLSearchParams({k: K, t: V.map_ts})}">
-        <div class="small muted">Карта на ${fmtT(V.map_ts, 1)} · оновлюється після прибирання і раз на добу; свіжу — кнопкою «🗺 Карта» в боті</div>`
-        : `<div class="muted small">Карти ще немає — натисніть «🗺 Карта» в боті.</div>`}</div>
+      <div><div class="vmapbox${vacMapBusy ? " busy" : ""}" id="vmapbox" title="Натисніть, щоб оновити карту">
+          ${V.map_ts ? `<img class="vmap" alt="Карта" src="/api/vacuum/map?${new URLSearchParams({k: K, t: V.map_ts})}">`
+            : `<div class="vnomap muted">Карти ще немає — натисніть, щоб отримати</div>`}
+          <div class="vov"><div class="spin"></div><span>Оновлюю карту…</span></div></div>
+        <div class="small muted" id="vmapcap">${V.map_ts ? `Карта на ${fmtT(V.map_ts, 1)} · натисніть на карту, щоб оновити` : ""}</div></div>
       <div>
         <h3 class="small muted">Кімнати</h3><div class="vrooms">${(V.rooms || []).map(r => `<span class="${act.has(r.id) ? "on" : ""}">${esc(r.name)}</span>`).join("")}</div>
         ${bars ? `<h3 class="small muted">Ресурс витратних матеріалів</h3><div class="vbars">${bars}</div>` : ""}
         ${Object.keys(st).length ? `<h3 class="small muted">База</h3><div class="small">${[["dust_bag","Мішок для пилу"],["clean_water_tank","Чиста вода"],["dirty_water_tank","Брудна вода"]]
           .filter(([k]) => st[k]).map(([k, t]) => `${t}: <b>${esc(vacSt(st[k]))}</b>`).join(" · ")}</div>` : ""}
+        ${(V.history || []).length ? `<h3 class="small muted">Історія прибирань (з хмари Dreame)</h3><div class="vhist">${V.history.slice(0, 12).map(h =>
+          `<div><span>${h.ts ? fmtT(h.ts, 1) : "—"}</span><span>${h.area != null ? `${h.area} м²` : ""}</span><span>${h.minutes != null ? `${h.minutes} хв` : ""}</span>
+           <span class="${h.completed === false ? "bad" : ""}">${h.completed === false ? `перервано${h.interrupt ? ` (${esc(h.interrupt.replace(/_/g, " "))})` : ""}` : "✅"}</span></div>`).join("")}</div>` : ""}
         <div class="small muted" style="margin-top:10px">Керування — у боті: «🤖 Пилосос». ${V.model ? `${esc(V.model)} · прошивка ${esc(V.fw || "—")}` : ""}</div>
       </div>
     </div>`;
+  document.getElementById("vmapbox").onclick = refreshVacMap;
+}
+
+// натиснули на карту — Lambda пилососа малює свіжу (~15 с); чекаємо нову map_ts і підміняємо картинку
+let vacMapBusy = false;
+async function refreshVacMap() {
+  if (vacMapBusy) return;
+  vacMapBusy = true;
+  const box = () => document.getElementById("vmapbox"); box() && box().classList.add("busy");
+  const cap = document.getElementById("vmapcap"), old = (await api("/api/vacuum").catch(() => ({}))).map_ts || 0;
+  try {
+    const r = await fetch(`/api/vacuum/map/refresh?${new URLSearchParams({k: K})}`, {method: "POST"}).then(x => x.json()).catch(() => ({}));
+    if (!r.started && cap) cap.textContent = "Карту щойно оновлювали — чекаю на неї…";
+    for (let i = 0; i < 25; i++) {
+      await new Promise(res => setTimeout(res, 3000));
+      const V = await api("/api/vacuum").catch(() => null);
+      if (V && V.map_ts && V.map_ts > old) break;
+    }
+  } finally {
+    vacMapBusy = false;
+    await renderVacuum();
+  }
 }
 
 let wTab = "today";
