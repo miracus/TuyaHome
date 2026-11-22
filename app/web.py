@@ -132,6 +132,9 @@ def lock_view(store, cfg, user, now=None):
         title += " · 📡 без інтернету"
     if stale:
         title = "⚠️ " + title
+    if (cfg.get("lockscreen") or {}).get("debug_time"):  # тимчасово для перевірки: час відповіді сервера з секундами
+        from datetime import datetime
+        title = datetime.fromtimestamp(now / 1000, local_tz(cfg)).strftime("%H:%M:%S") + " · " + title
 
     active = [(k, v) for k, v in visible_alerts(store, user).items() if v.get("active")]
     if len(active) == 1:

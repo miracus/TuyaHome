@@ -19,27 +19,29 @@ https://<адреса дашборда>/api/lock?k=<ваш ключ>
 Відповідь — JSON: `title` (світло й інтернет), `text` (решта рядків), `updated` (час останнього опитування дому), `stale` (`true`, якщо дані старші за 15 хв — наприклад, опитувач стоїть).
 Ключ — той самий, що в посиланні на дашборд: нікому не пересилайте.
 
-## Сценарій (flow) в Automate — лише на екрані блокування
+## Сценарій (flow) в Automate — перевірена схема (22.11)
 
-Сповіщення з'являється, коли натискаєте бокову кнопку (екран увімкнувся, телефон заблокований), і зникає, щойно розблокуєте. Під час звичайного користування його немає. Запит до дому — лише в момент увімкнення екрана.
+Сповіщення лише на екрані блокування: увімкнули екран заблокованим — свіжі дані (~0,8–1 с, це мережа телефона); розблокували — зникло. Поки екран світить, сценарій раз на секунду перевіряє «розблокували? згас?», тож ніколи не застрягає.
 
-Назви блоків у різних версіях Automate трохи відрізняються — шукайте в списку блоків за словами в дужках.
+| Блок | Налаштування | Виходи |
+|---|---|---|
+| Flow beginning | — | → Device interactive |
+| **Device interactive?** | Proceed **When changed** | YES і NO → Device unlocked (1) |
+| Device unlocked? (1) | Proceed **Immediately** | YES → Cancel (B) · NO → HTTP request |
+| HTTP request | URL з `/lockscreen`, GET, **Save to variable as text**, Response content `resp` | → Variable set |
+| Variable set | `d` = (fx) `jsonDecode(resp)` | → Cancel (A) |
+| Notification cancel (A) | ID (fx) `outputNotif` — прибрати попереднє | → Show notification |
+| Show notification | Title (fx) `d["title"]`, Message (fx) `d["text"]`, Channel «Дім» (Medium, без звуку), Ongoing, Proceed Immediately, Output Notification ID `outputNotif` | YES і NO → Delay |
+| Delay | 1 с | → Device unlocked (2) |
+| Device unlocked? (2) | **Immediately** | YES → Cancel (B) · NO → Device interactive (2) |
+| Device interactive? (2) | **Immediately** | YES → Delay · NO → Device interactive (перший) |
+| Notification cancel (B) | ID (fx) `outputNotif` | → Device interactive (перший) |
 
-1. **Flow beginning**.
-2. **Чекати, поки екран увімкнеться** (*display / screen on*): режим «чекати змін» (proceed when changed), щоб блок спрацьовував саме в момент увімкнення.
-3. **Телефон розблокований?** (*device unlocked / keyguard*): якщо **так** (екран увімкнули вже розблокованим, напр. відбитком) — назад на крок 2; якщо **ні** — далі.
-4. **Notification show** — одразу останні відомі дані, щоб не чекати мережу:
-   - Title: `d["title"]` (на першому запуску — `"🏠 Дім"`); Message: `d["text"] ++ "\n⏳ оновлюю…"`;
-   - **Ongoing**: так; канал «Дім» з **низькою** важливістю; постійний **Notification ID** (напр. `1`), щоб оновлювалось на місці.
-5. **HTTP request** — адреса вище, `GET`, **Response content** → змінна `resp`. Помилка (немає мережі) → крок 7.
-6. **Variable set** `d` = `jsonDecode(resp)` → **Notification show** з тим самим ID: Title `d["title"]`, Message `d["text"] ++ "\n⏱ " ++ d["updated"] ++ (d["stale"] ? " · дані застарілі" : "")`.
-7. **Чекати розблокування** (*device unlocked*, «чекати змін») **або вимкнення екрана** (*display off*):
-   - розблокували → **Notification cancel** (той самий ID) → крок 2;
-   - екран згас, не розблокувавши → крок 2 (наступне натискання оновить дані знову).
+Чому так: Samsung у момент увімкнення екрана часто спершу повідомляє «згас» (NO), тому обидва виходи першого блоку ведуть на перевірку — інакше «через раз». Без **Save to variable as text** змінна `resp` порожня, і замість даних на картці — назва сценарію.
 
-Запуск: **Start**. Після перезавантаження: Automate → Settings → **Run on system startup** → цей flow.
+Канали сповіщень Automate (Settings у самому Automate): **Running → Off** (прибирає «Running 1 fibers»), свій канал **«Дім» — Medium** (у Samsung для нього вимкнути звук і «Згорнути сповіщення»), інакше картка згортається в один рядок.
 
-Якщо в Automate не знайдеться потрібних блоків — те саме робиться в **Tasker**: подія *Display On* + стан *Display State: Locked* → HTTP Request → Notify (Permanent); подія *Display Unlocked* → Notify Cancel.
+Запуск: **Start**; після перезавантаження: Automate → Settings → **Run on system startup** → цей flow.
 
 ## Налаштування Samsung (One UI)
 
