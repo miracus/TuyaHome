@@ -213,6 +213,23 @@ def cmd_dtek(c):
     return None  # питання з кнопками — у handle_update
 
 
+@command("lockscreen", "📱 Стан дому на екрані блокування")
+def cmd_lockscreen(c):
+    return None  # відповідь з особистою адресою — у handle_update
+
+
+def lockscreen_text(link):
+    """Особиста адреса /api/lock для Automate на телефоні (той самий ключ, що й у дашборда)."""
+    if not link:
+        return "📱 Дашборд вимкнено — адреси для екрана блокування немає."
+    url = link.replace("/?k=", "/api/lock?k=")
+    return ("📱 Стан дому на екрані блокування (Android, Automate).\n\n"
+            "Ваша адреса — вставте її в блок HTTP request (довге натискання → Копіювати):\n"
+            f"{url}\n\n"
+            "Вона з вашим особистим ключем: нікому не пересилайте. "
+            "Покрокова інструкція — у власника (docs/LOCKSCREEN_ANDROID.md).")
+
+
 @command("dashboard", "📊 Відкрити дашборд")
 def cmd_dashboard(c):
     return None  # відповідь — кнопка, формується в handle_update
@@ -324,7 +341,7 @@ GUEST_BUTTONS = [["🚨 Тривоги", "📅 Графік ДТЕК"], ["🌤 �
 GUEST_KEYBOARD = {**KEYBOARD, "keyboard": [[{"text": t} for t in row] for row in GUEST_BUTTONS]}
 GUEST_CMDS = {"start", "alerts", "schedule", "address", "sound", "settings", "weather", "back", "morning"}
 # у меню команд (синя кнопка «Меню») — те саме, що на кнопках; решта команд працює, але не показується
-MENU_HIDDEN = {"help", "internet", "dtek", "address", "sound", "back", "morning", "health"}
+MENU_HIDDEN = {"help", "internet", "dtek", "address", "sound", "back", "morning", "health", "lockscreen"}
 
 
 def settings_keyboard(u):
@@ -1345,6 +1362,9 @@ def handle_update(update, store, cfg, notifier, group_id, web=None):
         return _goto(store, notifier, cfg, uid, "users", msg.get("message_id"), users)
     if cmd == "dashboard":
         dashboard_reply(notifier, uid, dashboard_link(web, u.get("role")))
+        return cmd
+    if cmd == "lockscreen":
+        _send(notifier, uid, lockscreen_text(dashboard_link(web, u.get("role"))), reply_markup=kb)
         return cmd
     if cmd == "settings":
         return _goto(store, notifier, cfg, uid, "settings", msg.get("message_id"), users)

@@ -218,3 +218,23 @@ resource "aws_lambda_permission" "web_url" {
   principal              = "*"
   function_url_auth_type = "NONE"
 }
+
+# 22.11: «будильник» для дашборда раз на 5 хв — екран блокування телефону (/api/lock) відповідає без холодного старту
+resource "aws_cloudwatch_event_rule" "web_warm" {
+  name                = "${var.name}-web-warm"
+  schedule_expression = "rate(5 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "web_warm" {
+  rule  = aws_cloudwatch_event_rule.web_warm.name
+  arn   = aws_lambda_function.web.arn
+  input = jsonencode({ warm = true })
+}
+
+resource "aws_lambda_permission" "web_warm" {
+  statement_id  = "AllowEventBridgeWarm"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.web.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.web_warm.arn
+}

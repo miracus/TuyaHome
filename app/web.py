@@ -9,7 +9,7 @@ import accuracy
 import schedule
 import weather
 from budget import plan
-from devices import load_config
+from devices import load_config, local_tz
 from rules import power_devices
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -99,6 +99,75 @@ def vacuum_map(store):
                                            "X-Robots-Tag": "noindex"}, "body": m["png"], "isBase64Encoded": True}
 
 
+def lock_view(store, cfg, user, now=None):
+    """Стан для екрана блокування телефону (Automate; 22.11). Samsung показує там заголовок і 2 рядки
+    по ~30 символів. Лише головне (рішення власника 22.11): світло зараз, коли зміниться за графіком, тривоги.
+    Інтернет — лише коли його немає. Квоту Tuya не витрачає."""
+    import air_alerts
+    import bot
+    from devices import fmt_time
+    now = now or int(time.time() * 1000)
+    c = bot._ctx(store, cfg)
+    r = c["rules"]
+    hub = bot._hub_online(c)
+    off = bool(r.get("outage"))
+    upd = c.get("last_poll") or now
+    stale = now - upd > 15 * 60_000
+
+    def hm(ms):
+        return "24:00" if fmt_time(ms, cfg) == "00:00" else fmt_time(ms, cfg)
+
+    # 22.11 (власник): «Світло є» / «Немає (23:00)» — у дужках коли мають дати за графіком; без «з якого часу»
+    sc = schedule.for_web(store, cfg, now)
+    nxt = sc.get("next_off") if sc else None
+    if off:
+        title = "🔌 Немає" + (f" ({hm(nxt[1])})" if nxt and nxt[0] <= now else "")
+    elif not hub:
+        title = "❔ Світло невідомо"
+    else:  # у дужках — коли вимкнуть за графіком (сьогодні/завтра); далі — без дужок
+        title = "💡 Світло є"
+        if nxt and nxt[0] > now and nxt[0] - now < 44 * 3600_000:
+            title += f" (до {'завтра ' if nxt[0] - now >= 20 * 3600_000 else ''}{fmt_time(nxt[0], cfg)})"
+    if not hub:
+        title += " · 📡 без інтернету"
+    if stale:
+        title = "⚠️ " + title
+
+    active = [(k, v) for k, v in visible_alerts(store, user).items() if v.get("active")]
+    if len(active) == 1:
+        k, v = active[0]
+        alert = f"{air_alerts.LEVELS.get(v.get('level'), ('🚨', ''))[0]} Тривога з {fmt_time(v['since'], cfg)}"
+    elif active:
+        alert = f"🚨 Тривоги: {len(active)}"
+    else:
+        alert = "🕊 Тривоги немає"
+    # погода: значок неба (прогноз; дощ/сніг — за rain_now), температура надворі (датчик, інакше прогноз) і вдома
+    import climate
+    from datetime import datetime
+    wmeta = store.get_meta("weather") or {}
+    cur = wmeta.get("current") or {}
+    sensor = weather.outdoor_sensor(store, cfg, c["states"])
+    ico = weather.describe(cur.get("code"))[0] if cur.get("code") is not None else "🌡"
+    rn = weather.rain_now(cur, sensor) if cur else {}
+    if rn.get("rain"):
+        ico = "🌨" if "сніг" in rn.get("text", "") else "🌧"
+    hour = datetime.fromtimestamp(now / 1000, local_tz(cfg)).hour
+    if ico in ("☀️", "🌤") and (hour >= 19 or hour < 6):
+        ico = "🌙"
+    t_out = (sensor or {}).get("temp") if sensor and sensor.get("online") else None
+    if t_out is None:
+        t_out = cur.get("temp")
+    outside = (cfg.get("weather") or {}).get("sensor")
+    t_in = next((rd[0] for st in sorted(c["states"], key=lambda s: s.get("name", ""))
+                 if st.get("online") and st.get("name") != outside
+                 for rd in [climate.reading(st)] if rd and rd[0] is not None), None)
+    temp = " · ".join(x for x in (f"{ico} {round(t_out)}° надворі" if t_out is not None else "",
+                                  f"🏠 {round(t_in)}° вдома" if t_in is not None else "") if x)
+    # три рядки, кожен про своє (власник 22.11): світло — заголовок; тривоги; погода
+    return {"title": title, "text": chr(10).join(x for x in (alert, temp) if x), "updated": fmt_time(upd, cfg),
+            "stale": stale}
+
+
 def manifest(key):
     icons = [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
              {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
@@ -165,6 +234,9 @@ def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
         with open(os.path.join(HERE, PAGES[path]), encoding="utf-8") as f:
             return _resp(200, f.read(), "text/html; charset=utf-8")
 
+    if path == "/api/lock":  # екран блокування телефону: {"title", "text", "updated", "stale"}
+        print(f"lock screen by {user}")
+        return _resp(200, lock_view(store, cfg, user))
     if path == "/api/vacuum":
         return _resp(200, vacuum_state(store, cfg, live=qs.get("live") == "1"))
     if path == "/api/vacuum/map":
@@ -301,6 +373,9 @@ def lambda_handler(event, context):
         _CACHE["store"] = DynamoStore(os.environ["TABLE_NAME"])
         _CACHE["cfg"] = load_config()
     cfg, store = _CACHE["cfg"], _CACHE["store"]
+    if event.get("warm"):  # EventBridge раз на 5 хв: Lambda тепла, екран блокування відповідає за десяті секунди
+        import air_alerts, bot  # noqa: F401,E401  (імпорти lock_view — заздалегідь)
+        return {"warm": True}
     method = ((event.get("requestContext") or {}).get("http") or {}).get("method", "GET")
     body = event.get("body") or ""
     if event.get("isBase64Encoded") and body:
