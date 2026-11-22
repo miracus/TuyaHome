@@ -109,6 +109,13 @@
     "window_days": 30,
     "min_matched": 5
   },
+  "_vacuum_comment": "Пилосос Dreame (хмара Dreamehome, окрема Lambda tuyahome-vacuum): токен — SSM ssm_param (створює tools/dreame_login.py); room_names — власні назви кімнат за id з карти; check_hour — щоденна перевірка (токен, прошивка, карта).",
+  "vacuum": {
+    "enabled": true,
+    "ssm_param": "/tuyahome/dreame",
+    "check_hour": 4,
+    "room_names": {}
+  },
   "alarm_values": [
     "alarm",
     "1",

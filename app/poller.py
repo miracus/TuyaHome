@@ -155,6 +155,12 @@ def run(store, api, cfg, notifier, uid, now=None):
         except Exception as e:  # не повинні ламати опитування
             summary[key] = f"{type(e).__name__}: {e}"
             print(f"[poller] {key}: {type(e).__name__}: {e}")
+    # --- пилосос Dreame: стеження під час прибирання і щоденна перевірка (сама робота — в окремій Lambda)
+    try:
+        import vacuum_bot
+        summary["vacuum"] = vacuum_bot.tick(store, cfg, now)
+    except Exception as e:
+        summary["vacuum"] = f"{type(e).__name__}: {e}"
     # --- відповіді ДТЕК на заявку «немає світла» (лише поки заявка «жива», див. dtek.py)
     summary["dtek"] = _dtek_replies(store, cfg, notifier, now)
 

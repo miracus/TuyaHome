@@ -218,6 +218,11 @@ def cmd_dashboard(c):
     return None  # відповідь — кнопка, формується в handle_update
 
 
+@command("vacuum", "🤖 Пилосос: прибирання і «на базу»")
+def cmd_vacuum(c):
+    return None  # меню з кнопками — у handle_update (vacuum_bot)
+
+
 @command("weather", "🌤 Погода: прогноз і датчик «Назовні»")
 def cmd_weather(c):
     # власна адреса далеко від дому (або гість) — лише прогноз для адреси, без датчика й поточного стану
@@ -300,10 +305,10 @@ def cmd_help(c):
 # 2026-11-17: «🌐 Інтернет» прибрано (досить сповіщень), «🆘 Заявка ДТЕК» — поки dtek_report вимкнено;
 # «📍 Моя адреса», «🔔 Звук», «👥 Користувачі» — під «⚙️ Налаштування»
 BUTTONS = [["💡 Світло", "⚡ Напруга"], ["🩺 Чекап", "🌤 Погода"], ["🚨 Тривоги", "📅 Графік ДТЕК"],
-           ["📊 Дашборд", "⚙️ Налаштування"]]
+           ["📊 Дашборд", "🤖 Пилосос"], ["⚙️ Налаштування"]]
 BUTTON_CMD = {"💡 Світло": "light", "🌐 Інтернет": "internet", "⚡ Напруга": "voltage", "🩺 Чекап": "check",
               "🚨 Тривоги": "alerts", "📅 Графік ДТЕК": "schedule", "📊 Дашборд": "dashboard",
-              "🌤 Погода": "weather"}
+              "🌤 Погода": "weather", "🤖 Пилосос": "vacuum"}
 KEYBOARD = {"keyboard": [[{"text": t} for t in row] for row in BUTTONS], "resize_keyboard": True,
             "is_persistent": True, "input_field_placeholder": "Оберіть кнопку нижче"}
 OWNER_BUTTONS = BUTTONS
@@ -1231,6 +1236,9 @@ def handle_callback(cb, store, notifier, web, cfg=None):
         return handle_sound_callback(cb, store, cfg or {}, notifier)
     if (cb.get("data") or "").startswith("dt:"):
         return handle_dtek_callback(cb, store, cfg or {}, notifier)
+    if (cb.get("data") or "").startswith("vc:"):
+        import vacuum_bot
+        return vacuum_bot.handle_callback(cb, store, cfg or {}, notifier, get_users(store))
     if (cb.get("data") or "").startswith("set:"):  # пункт «⚙️ Налаштування» = та сама команда, що й раніше кнопкою
         notifier.call("answerCallbackQuery", {"callback_query_id": cb["id"]}, retries=0)
         frm = cb.get("from") or {}
@@ -1345,6 +1353,9 @@ def handle_update(update, store, cfg, notifier, group_id, web=None):
         return cmd
     if cmd == "sound":
         return _goto(store, notifier, cfg, uid, "sound", msg.get("message_id"), users)
+    if cmd == "vacuum":
+        import vacuum_bot
+        return vacuum_bot.open_menu(store, cfg, notifier, uid)
     if cmd == "dtek":
         text, markup = dtek_view(store, cfg)
         _send(notifier, uid, text, **({"reply_markup": markup} if markup else {}))

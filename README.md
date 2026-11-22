@@ -19,6 +19,8 @@
 - **Стан приладів** — щотижня власнику: батареї й темп розряду, хто випадав зі зв'язку; окремо — сигнал про надто швидкий розряд.
 - **Сторожовий пес** — CloudWatch-сигнали (опитувач мовчить, помилки, ліміт Lambda, повільний бот) і бюджет AWS → Telegram власнику.
 - **Застосунок на телефоні (PWA)** — дашборд на головному екрані, останні дані без мережі.
+- **Пилосос Dreame** — у боті: прибрати всі кімнати / всі, крім… / вибрані, кількість проходів і режим; «на базу» одразу; карта.
+  На дашборді — стан, карта, ресурс щіток і фільтрів, база. Окрема Lambda, хмара Dreamehome, у AWS лише токен (без пароля).
 - **Квота Tuya** — вкладається в 26 000 запитів на місяць завдяки плануванню опитувань по приладах.
 
 ```
@@ -52,6 +54,8 @@ Python 3.13 · AWS Lambda · DynamoDB · EventBridge · Terraform · vanilla JS 
 | `app/reports.py` | ранковий підсумок (7:00) і тижневий стан приладів |
 | `app/watchdog.py`, `infra/watchdog.tf` | сторожовий пес: CloudWatch + бюджет → SNS → Telegram |
 | `app/static/` | PWA: service worker, іконки |
+| `app/vacuum.py`, `app/vacuum_bot.py`, `infra/vacuum.tf` | пилосос Dreame: окрема Lambda (бібліотека Tasshack/dreame-vacuum, MIT, у шарі) і меню бота |
+| `tools/build_vacuum_layer.ps1`, `tools/dreame_login.py` | збирання шару пилососа; перший вхід (пароль → токен у SSM) |
 | `tests/` | автотести (stdlib `unittest`), на GitHub — `.github/workflows/tests.yml` |
 | `app/store.py` | DynamoDB у хмарі / JSON-файл локально |
 | `tools/alert_rank_build.py` | одноразове наповнення рейтингу міст за рік (відкритий набір даних + siren.pp.ua) |

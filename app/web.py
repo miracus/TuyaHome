@@ -53,6 +53,50 @@ def static_file(path):
     return {"statusCode": 200, "headers": headers, "body": base64.b64encode(data).decode(), "isBase64Encoded": True}
 
 
+def _vacuum_refresh(store, op, every_min):
+    """Дашборд відкрили, а дані пилососа застарілі — попросити Lambda пилососа оновити (не частіше every_min)."""
+    if not os.environ.get("VACUUM_FN"):
+        return
+    now = int(time.time() * 1000)
+    t = store.get_meta("vacuum_tick") or {}
+    if now - t.get(f"web_{op}", 0) < every_min * 60_000:
+        return
+    store.put_meta("vacuum_tick", {**t, f"web_{op}": now})
+    try:
+        import vacuum_bot
+        vacuum_bot.invoke({"op": op})
+    except Exception as e:
+        print(f"[web] vacuum {op}: {type(e).__name__}: {e}")
+
+
+def vacuum_state(store, cfg, live=False):
+    """Пилосос на дашборд (дашборд — лише учасники «🏠 Дім»: гості посилання не мають)."""
+    meta = store.get_meta("vacuum")
+    if not meta:
+        return {"connected": False}
+    now = int(time.time() * 1000)
+    if live and not meta.get("active") and now - (meta.get("updated") or 0) > 10 * 60_000:
+        _vacuum_refresh(store, "status", 5)
+    import vacuum_bot as vb
+    m = store.get_meta("vacuum_map") or {}
+    return {"connected": True, **{k: v for k, v in meta.items() if k not in ("fail", "lost_told")},
+            "state_text": vb.state_text(meta.get("state")), "text": vb.status_text(meta, cfg, now),
+            "mode_text": vb.mode_label(vb.MODE_NAME_TO_KEY.get(meta.get("mode") or "")),
+            "suction_text": vb.SUCTION_UA.get(meta.get("suction") or "", meta.get("suction")),
+            "map_ts": m.get("ts")}
+
+
+def vacuum_map(store):
+    m = store.get_meta("vacuum_map") or {}
+    now = int(time.time() * 1000)
+    if now - (m.get("ts") or 0) > 6 * 3600_000:
+        _vacuum_refresh(store, "map", 10)
+    if not m.get("png"):
+        return _resp(404, "no map", "text/plain")
+    return {"statusCode": 200, "headers": {"Content-Type": "image/png", "Cache-Control": "private, max-age=60",
+                                           "X-Robots-Tag": "noindex"}, "body": m["png"], "isBase64Encoded": True}
+
+
 def manifest(key):
     icons = [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
              {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
@@ -118,6 +162,11 @@ def handle(store, path, qs, cfg, keys, method="GET", body="", headers=None):
         print(f"{path} opened by {user}")
         with open(os.path.join(HERE, PAGES[path]), encoding="utf-8") as f:
             return _resp(200, f.read(), "text/html; charset=utf-8")
+
+    if path == "/api/vacuum":
+        return _resp(200, vacuum_state(store, cfg, live=qs.get("live") == "1"))
+    if path == "/api/vacuum/map":
+        return vacuum_map(store)
 
     if path == "/api/state":
         states = [s for s in store.get_states().values() if not s.get("missing")]

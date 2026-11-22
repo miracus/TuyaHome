@@ -108,10 +108,12 @@ data "aws_iam_policy_document" "lambda" {
     actions   = ["ssm:GetParameter"]
     resources = ["arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter${local.cfg.dtek_report.ssm_param}"]
   }
-  # кнопка «🆘 Заявка ДТЕК»: web-Lambda запускає опитувача асинхронно (ім'я — рядком, щоб не було циклу залежностей)
+  # кнопка «🆘 Заявка ДТЕК»: web-Lambda запускає опитувача асинхронно (ім'я — рядком, щоб не було циклу залежностей);
+  # пилосос: бот, дашборд і опитувач запускають Lambda пилососа асинхронно
   statement {
-    actions   = ["lambda:InvokeFunction"]
-    resources = ["arn:aws:lambda:${var.region}:${data.aws_caller_identity.me.account_id}:function:${var.name}-poller"]
+    actions = ["lambda:InvokeFunction"]
+    resources = ["arn:aws:lambda:${var.region}:${data.aws_caller_identity.me.account_id}:function:${var.name}-poller",
+    "arn:aws:lambda:${var.region}:${data.aws_caller_identity.me.account_id}:function:${var.name}-vacuum"]
   }
 }
 
@@ -153,7 +155,7 @@ resource "aws_lambda_function" "poller" {
       # для реєстрації webhook бота (poller {"tg_setup": true})
       TG_SECRET = random_password.tg_secret.result
       WEB_URL   = aws_lambda_function_url.web.function_url
-    })
+    }, local.vacuum_env)
   }
   depends_on = [aws_cloudwatch_log_group.poller, aws_iam_role_policy.lambda]
 }
@@ -199,7 +201,7 @@ resource "aws_lambda_function" "web" {
       TELEGRAM_BOT_TOKEN = var.telegram_bot_token
       TELEGRAM_CHAT_ID   = var.telegram_chat_id
       TG_SECRET          = random_password.tg_secret.result
-    })
+    }, local.vacuum_env)
   }
   depends_on = [aws_cloudwatch_log_group.web, aws_iam_role_policy.lambda]
 }

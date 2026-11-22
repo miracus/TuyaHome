@@ -69,6 +69,21 @@ body.loading #loader{display:flex}body.loading main{visibility:hidden}
 .hload .spin{width:22px;height:22px;border-width:3px}
 body[data-top="history"] #hist ~ *{display:none}
 body:not([data-top="game"]) #game{display:none}
+/* пилосос (22.11) — окрема вкладка, лише коли пилосос підключено */
+body:not([data-top="vacuum"]) #vac{display:none}
+body[data-top="vacuum"] #sched,body[data-top="vacuum"] #weather,body[data-top="vacuum"] #vac ~ *{display:none}
+#vac{margin-bottom:12px}
+.vgrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px}
+@media (max-width:760px){.vgrid{grid-template-columns:1fr}}
+.vmap{width:100%;border-radius:12px;border:1px solid var(--line);background:var(--bg)}
+.vbars{display:grid;gap:7px;margin:4px 0 10px}
+.vbar{display:grid;grid-template-columns:130px 1fr 44px;align-items:center;gap:8px;font-size:13px}
+.vbar i{display:block;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.vbar i b{display:block;height:100%;border-radius:4px;background:var(--good,#16a34a)}
+.vbar i b.mid{background:#f59e0b}.vbar i b.low{background:var(--bad,#dc2626)}
+.vbar span:last-child{text-align:right;color:var(--muted)}
+.vrooms{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}.vrooms span{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px}
+.vrooms span.on{border-color:var(--accent);color:var(--accent);font-weight:600}
 body[data-top="game"] #sched,body[data-top="game"] #weather,body[data-top="game"] #game ~ *{display:none}
 /* гра «Пляшечки» */
 #game{margin-bottom:12px}
@@ -341,11 +356,12 @@ ul.list li.dim{color:var(--muted)}
   <div id="err" class="err"></div>
 
   <!-- над графіками: перемикач «Світло» (графік ДТЕК + факт) / «Погода» (прогноз + датчик); за замовчуванням — світло -->
-  <div class="toptabs"><span class="seg" id="toptabs"><button data-t="power" class="on">💡 Світло</button><button data-t="weather">🌤 Погода</button><button data-t="history">📜 Історія</button><button data-t="game">🎮 Гра</button></span></div>
+  <div class="toptabs"><span class="seg" id="toptabs"><button data-t="power" class="on">💡 Світло</button><button data-t="weather">🌤 Погода</button><button data-t="history">📜 Історія</button><button data-t="game">🎮 Гра</button><button data-t="vacuum" id="vac-tab" hidden>🤖 Пилосос</button></span></div>
   <section class="card" id="sched" hidden></section>
   <section class="card" id="weather" hidden></section>
   <section class="card" id="hist"></section>
   <section class="card" id="game"></section>
+  <section class="card" id="vac"></section>
 
   <!-- два види: «Показники» (аналогові, за замовчуванням) і «Датчики і прилади» (дискретні);
        перемикач — вертикальна стрілка на всю висоту: справа на показниках, зліва на датчиках -->
@@ -526,6 +542,46 @@ function rainBars(d0, d1, hours, F, hum) {
   }
   const nowPos = S.now >= d0 && S.now < d1 ? `<span class="now" style="left:${x(S.now)}%"></span>` : "";
   return `<div class="rain">${bars}${wet}<span class="rng">${mm.some(v => v) ? `${+top.toFixed(1)} мм/год` : "без опадів"}</span>${nowPos}</div>`;
+}
+
+// --- пилосос (дані — з Lambda пилососа через META vacuum; керування — у боті «🤖 Пилосос»)
+const VAC_CONS = [["main_brush","Основна щітка"],["side_brush","Бокова щітка"],["filter","Фільтр"],["mop","Мопи"],
+  ["sensor_dirty","Датчики"],["squeegee","Скребок"],["tank_filter","Фільтр бака"],["detergent","Миючий засіб"]];
+const VAC_ST = {installed:"на місці",not_installed:"не встановлено",no_water:"немає води",low_water:"мало води",
+  full:"повний",normal:"норма",filled:"заповнено",dirty_water_full:"повний",not_full:"не повний",check:"перевірте",
+  replace:"замініть",no_dust_bag:"немає мішка",dust_bag_full:"мішок повний",unknown:"—"};
+const vacSt = v => VAC_ST[v] || String(v || "—").replace(/_/g, " ");
+async function renderVacuum() {
+  const el = document.getElementById("vac"), tab = document.getElementById("vac-tab");
+  // live=1 — лише коли вкладка відкрита: тоді застарілий стан оновлюється (вхід у хмару Dreame), інакше — кеш
+  const V = await api("/api/vacuum", document.body.dataset.top === "vacuum" ? {live: 1} : {}).catch(() => null);
+  if (!V || !V.connected) { tab.hidden = true; return; }
+  tab.hidden = false;
+  const tile = (ico, cap, big, sub) => `<div class="wt"><span class="wi">${ico}</span><div><small>${cap}</small><b>${big}</b>${sub ? `<span>${sub}</span>` : ""}</div></div>`;
+  const a = V.active, last = V.last, act = new Set((a && a.rooms) || []);
+  const bars = VAC_CONS.filter(([k]) => V.consumables && V.consumables[k] != null).map(([k, t]) => {
+    const v = V.consumables[k]; return `<div class="vbar"><span>${t}</span><i><b class="${v < 10 ? "low" : v < 30 ? "mid" : ""}" style="width:${Math.max(2, v)}%"></b></i><span>${v}%</span></div>`; }).join("");
+  const st = V.station || {};
+  el.innerHTML = `<div class="sec-head"><h2>🤖 ${esc(V.name || "Пилосос")}</h2><span class="small muted">${V.updated ? `оновлено о ${fmtT(V.updated)}` : ""}</span></div>
+    <div class="wtiles">
+      ${tile(V.battery >= 20 ? "🔋" : "🪫", "Стан", esc(V.state_text), V.battery != null ? `батарея ${V.battery}%` : "")}
+      ${tile("⚙️", "Режим", esc(V.mode_text || "—"), V.suction_text ? `потужність: ${esc(V.suction_text)}` : "")}
+      ${a ? tile("▶️", "Зараз прибирає", esc(a.rooms_text || ""), `${a.times}× · ${V.room_now ? `кімната: ${esc(V.room_now)} · ` : ""}${V.area != null ? `${V.area} м² за ${V.minutes || 0} хв` : ""}${a.by ? ` · запустив ${esc(a.by)}` : ""}`)
+          : last ? tile("✅", "Останнє прибирання", esc(last.rooms_text || ""), `${fmtT(last.finished, 1)}${last.area ? ` · ${last.area} м²` : ""}${last.minutes ? ` за ${last.minutes} хв` : ""}${last.by ? ` · ${esc(last.by)}` : ""}`) : ""}
+      ${V.error ? tile("⚠️", "Помилка", esc(String(V.error).replace(/_/g, " ")), "") : ""}
+    </div>
+    <div class="vgrid">
+      <div>${V.map_ts ? `<img class="vmap" alt="Карта" src="/api/vacuum/map?${new URLSearchParams({k: K, t: V.map_ts})}">
+        <div class="small muted">Карта на ${fmtT(V.map_ts, 1)} · оновлюється після прибирання і раз на добу; свіжу — кнопкою «🗺 Карта» в боті</div>`
+        : `<div class="muted small">Карти ще немає — натисніть «🗺 Карта» в боті.</div>`}</div>
+      <div>
+        <h3 class="small muted">Кімнати</h3><div class="vrooms">${(V.rooms || []).map(r => `<span class="${act.has(r.id) ? "on" : ""}">${esc(r.name)}</span>`).join("")}</div>
+        ${bars ? `<h3 class="small muted">Ресурс витратних матеріалів</h3><div class="vbars">${bars}</div>` : ""}
+        ${Object.keys(st).length ? `<h3 class="small muted">База</h3><div class="small">${[["dust_bag","Мішок для пилу"],["clean_water_tank","Чиста вода"],["dirty_water_tank","Брудна вода"]]
+          .filter(([k]) => st[k]).map(([k, t]) => `${t}: <b>${esc(vacSt(st[k]))}</b>`).join(" · ")}</div>` : ""}
+        <div class="small muted" style="margin-top:10px">Керування — у боті: «🤖 Пилосос». ${V.model ? `${esc(V.model)} · прошивка ${esc(V.fw || "—")}` : ""}</div>
+      </div>
+    </div>`;
 }
 
 let wTab = "today";
@@ -1900,7 +1956,7 @@ async function load() {
     S = await api("/api/state");
     document.getElementById("err").style.display = "none";
     renderHeader(); renderDevices(); renderQuota(); renderRanges();
-    await Promise.all([renderSchedule(), renderWeather(), renderCharts(), renderLists()]);
+    await Promise.all([renderSchedule(), renderWeather(), renderCharts(), renderLists(), renderVacuum()]);
     document.body.classList.remove("loading");
   } catch (e) {
     if (document.body.classList.contains("loading")) {  // перше завантаження не вдалось — пишемо на екрані завантаження
@@ -1929,6 +1985,7 @@ document.querySelectorAll("#toptabs button").forEach(b => b.onclick = () => {
   document.body.dataset.top = b.dataset.t;
   if (b.dataset.t === "history") initHistory();
   if (b.dataset.t === "game") initGame();
+  if (b.dataset.t === "vacuum") renderVacuum();
   document.querySelectorAll("#toptabs button").forEach(x => x.classList.toggle("on", x === b));
 });
 // 19.11: відкриті у фоні дашборди щохвилини смикали Lambda (по кілька запитів) — разом з ботом
