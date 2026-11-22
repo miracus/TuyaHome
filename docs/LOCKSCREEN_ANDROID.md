@@ -43,11 +43,36 @@ https://<адреса дашборда>/api/lock?k=<ваш ключ>
 
 Запуск: **Start**; після перезавантаження: Automate → Settings → **Run on system startup** → цей flow.
 
-## Налаштування Samsung (One UI)
+## Повний чек-лист налаштувань (Samsung One UI + Automate, перевірено 22.11)
 
-- **Налаштування → Сповіщення → Сповіщення на екрані блокування**: увімкнути, стиль **«Деталі»** (за замовчуванням — лише значки).
-- **Налаштування → Батарея → Обмеження використання у фоні → Ніколи не переводити в режим сну** → додати **Automate**. Інакше Samsung зупинить цикл.
-- Канал «Дім» у сповіщеннях Automate: беззвучно.
+### Automate — сам застосунок
+- Встановити з Google Play (LlamaLab Automate).
+- Сценарій → **Privileges**: відмічені «показувати сповіщення», «отримувати повний доступ до мережі», «переглядати мережеві з'єднання», «ignore battery optimizations» (решта — як запропонує Automate).
+- Попередження «Pause app activity if unused» → **FORGET** (на Samsung цей перемикач сірий, недоступний).
+- Automate → **Settings → Run on system startup** → цей flow (запуск після перезавантаження).
+- Automate → **Settings** → канали сповіщень:
+  - **Running** → **Off** (прибирає картку «Running 1 fibers»);
+  - **+** → новий канал **«Дім»**, важливість **Medium** (не Low — інакше Samsung згортає картку в один рядок).
+- У блоці **Show notification** → Channel **«Дім»**.
+
+### Блоки сценарію (усі поля, які змінювались)
+| Блок | Поля |
+|---|---|
+| When device interactive (перший) | Proceed: **When changed** |
+| Is device unlocked (обидва) | Proceed: **Immediately** |
+| Is device interactive (у петлі) | Proceed: **Immediately** |
+| HTTP request | URL — з команди бота **/lockscreen**; Method **GET**; Save response: **Save to variable as text**; Response content or filename: `resp` |
+| Set variable | Variable `d`; Value (fx) `jsonDecode(resp)` |
+| Show notification | Title (fx) `d["title"]`; Message (fx) `d["text"]`; Channel «Дім»; **Ongoing** ✓; Proceed **Immediately**; Output variables → Notification ID: `outputNotif` |
+| Notification cancel (обидва) | Notification ID (fx) `outputNotif` |
+| Delay | 1 с (менше секунди вікно вибору часу не дає) |
+
+### Android / Samsung
+- **Налаштування → Сповіщення → Сповіщення на екрані блокування**: увімкнено; стиль **«Деталі»**; **показувати беззвучні сповіщення** — увімкнено; вміст — показувати; Automate — у списку дозволених.
+- **Налаштування → Програми → Automate → Сповіщення**: «Дозвіл на сповіщення» — увімкнено; «Звук і вібрація» — можна лишити вимкненим; **Екран блокування** ✓; «Відображення або приховування під час блокування» — Відображати завжди.
+- Там же → **«Налаштуйте в програмі «Automate»»** → категорія **Running**: дозвіл на сповіщення — **вимкнено**; категорія **«Дім»**: «Згорнути сповіщення» — **вимкнено**, «Екран блокування» — **Показувати вміст**, звук — без звуку.
+- **Налаштування → Програми → Automate → Акумулятор → «Без обмежень»** (інакше Samsung присипляє сценарій).
+- Розблокування обличчям не заважає, але на перевіреному телефоні воно вимкнене.
 
 ## Батарея, трафік і швидкість
 
